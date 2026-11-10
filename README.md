@@ -1,59 +1,159 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Inboxly Backend
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel REST API for Inboxly, a workspace-based Shopify marketing SaaS.
 
-## About Laravel
+## Stack
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP **8.4+**
+- Laravel **12**
+- MySQL **8+**
+- Laravel Sanctum (first-party SPA cookie authentication)
+- API prefix: `/api/v1`
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Frontend (separate repository): Vite + React at `http://localhost:5173`.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Requirements
 
-## Learning Laravel
+- PHP 8.4 with extensions: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`
+- Composer 2
+- MySQL listening on `127.0.0.1:3306`
+- Dedicated databases only:
+  - Application: `inboxly`
+  - Automated tests: `inboxly_testing`
+- Never point this app at Nexora, DataSyncAI, recovery dumps, or other shared databases
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## Local setup
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```bash
+cp .env.example .env
+composer install
+php artisan key:generate
+```
 
-## Laravel Sponsors
+Create MySQL databases (phpMyAdmin or CLI):
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```sql
+CREATE DATABASE inboxly CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE inboxly_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
 
-### Premium Partners
+Set local credentials in `.env` (never commit `.env`):
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=inboxly
+DB_USERNAME=root
+DB_PASSWORD=your-local-password
 
-## Contributing
+FRONTEND_URL=http://localhost:5173
+SANCTUM_STATEFUL_DOMAINS=localhost:5173,127.0.0.1:5173,localhost:8000,127.0.0.1:8000
+CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Run migrations against the application database only:
 
-## Code of Conduct
+```bash
+php artisan migrate
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Do **not** run `migrate:fresh` or `db:wipe` against shared or production data.
 
-## Security Vulnerabilities
+## Development server
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php artisan serve
+```
 
-## License
+Default local API base: `http://localhost:8000`  
+Health check: `GET /up`
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## SPA authentication flow (React)
+
+Sanctum cookie auth — **do not store API tokens in localStorage**.
+
+1. `GET /sanctum/csrf-cookie` with `credentials: 'include'`
+2. `POST /api/v1/auth/login` or `/api/v1/auth/register` with `credentials: 'include'` and `X-XSRF-TOKEN`
+3. Call authenticated `/api/v1/*` endpoints with `credentials: 'include'`
+4. `POST /api/v1/auth/logout` with credentials
+
+Required browser/client settings:
+
+- Exact CORS origin match (`FRONTEND_URL` / `CORS_ALLOWED_ORIGINS`)
+- Credentials enabled
+- CSRF cookie + header for mutating requests
+
+Local HTTP cookie defaults:
+
+- `SESSION_SECURE_COOKIE=false`
+- `SESSION_SAME_SITE=lax`
+- `SESSION_HTTP_ONLY=true`
+
+Production HTTPS should set `SESSION_SECURE_COOKIE=true` and configure real domains.
+
+## Mail
+
+Development default: `MAIL_MAILER=log` (writes to `storage/logs`).
+
+Password reset and email verification use Laravel’s mail system. Configure SMTP later via:
+
+- `MAIL_MAILER=smtp`
+- `MAIL_HOST` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD`
+- `MAIL_SCHEME` (for example `tls`)
+- `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME`
+
+## Queues
+
+Default: `QUEUE_CONNECTION=database` (uses `jobs` / `failed_jobs` tables).
+
+Optional worker (start only when needed):
+
+```bash
+php artisan queue:work --tries=3
+```
+
+## Cache and sessions
+
+Local defaults:
+
+- `CACHE_STORE=database`
+- `SESSION_DRIVER=database`
+- `SESSION_LIFETIME=120`
+
+Redis is optional and not required for local development.
+
+## File storage
+
+- Default disk: `local` → `storage/app/private` (not publicly served)
+- Public assets (if needed later): `public` disk + `php artisan storage:link`
+- Production can switch to S3-compatible storage (`AWS_*` / `AWS_ENDPOINT` for R2)
+
+## Tests
+
+PHPUnit is **forced** to MySQL database `inboxly_testing` in `phpunit.xml` (`force="true"`), so `.env` cannot accidentally target `inboxly`.
+
+```bash
+php artisan test
+```
+
+## Useful commands
+
+```bash
+php artisan about
+php artisan route:list --path=api/v1
+php artisan config:clear
+php artisan migrate:status
+php artisan test
+```
+
+## Production checklist (deployment-dependent)
+
+- Set `APP_ENV=production` and `APP_DEBUG=false`
+- Use a strong unique `APP_KEY` (do not reuse local keys)
+- Configure production `APP_URL`, `FRONTEND_URL`, Sanctum stateful domains, and CORS origins
+- Enable `SESSION_SECURE_COOKIE=true` behind HTTPS
+- Configure real SMTP
+- Choose production queue/cache drivers
+- Configure S3/R2 if private object storage is required
+- Never commit `.env` or credentials

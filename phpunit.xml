@@ -20,15 +20,25 @@
     <php>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
+        <env name="APP_TIMEZONE" value="UTC"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="sqlite"/>
-        <env name="DB_DATABASE" value=":memory:"/>
-        <env name="DB_URL" value=""/>
+        <env name="FRONTEND_URL" value="http://127.0.0.1:5173" force="true"/>
+        <env name="SANCTUM_STATEFUL_DOMAINS" value="localhost:5173,127.0.0.1:5173" force="true"/>
+        <env name="CORS_ALLOWED_ORIGINS" value="http://127.0.0.1:5173,http://localhost:5173" force="true"/>
+        <!-- force=true prevents .env from accidentally targeting inboxly / nexora -->
+        <env name="DB_CONNECTION" value="mysql" force="true"/>
+        <env name="DB_HOST" value="127.0.0.1" force="true"/>
+        <env name="DB_PORT" value="3306" force="true"/>
+        <env name="DB_DATABASE" value="inboxly_testing" force="true"/>
+        <env name="DB_USERNAME" value="root" force="true"/>
+        <env name="DB_URL" value="" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <env name="SESSION_SECURE_COOKIE" value="false"/>
+        <env name="SESSION_SAME_SITE" value="lax"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
