@@ -5,8 +5,14 @@ use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\RegisterController;
 use App\Http\Controllers\Api\V1\Auth\SessionController;
+use App\Http\Controllers\Api\V1\ContactConsentController;
+use App\Http\Controllers\Api\V1\ContactController;
+use App\Http\Controllers\Api\V1\ContactImportController;
+use App\Http\Controllers\Api\V1\ContactTagController;
+use App\Http\Controllers\Api\V1\SegmentController;
 use App\Http\Controllers\Api\V1\StoreActivationController;
 use App\Http\Controllers\Api\V1\StoreController;
+use App\Http\Controllers\Api\V1\TagController;
 use App\Http\Controllers\Api\V1\WorkspaceController;
 use App\Http\Controllers\Api\V1\WorkspaceInvitationController;
 use App\Http\Controllers\Api\V1\WorkspaceMemberController;
@@ -54,4 +60,29 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('workspaces/{workspace}/stores', [StoreController::class, 'index']);
     Route::post('workspaces/{workspace}/stores', [StoreController::class, 'store']);
     Route::post('stores/{store}/activate', StoreActivationController::class);
+
+    // Audience (Phase 2). Every handler authorises against the owning store's workspace.
+    Route::get('stores/{store}/contacts', [ContactController::class, 'index']);
+    Route::post('stores/{store}/contacts', [ContactController::class, 'store']);
+    Route::get('contacts/{contact}', [ContactController::class, 'show']);
+    Route::put('contacts/{contact}', [ContactController::class, 'update']);
+    Route::delete('contacts/{contact}', [ContactController::class, 'destroy']);
+    Route::put('contacts/{contact}/consents', [ContactConsentController::class, 'update']);
+    Route::post('contacts/{contact}/tags', [ContactTagController::class, 'store']);
+    Route::delete('contacts/{contact}/tags/{tag}', [ContactTagController::class, 'destroy']);
+
+    Route::get('stores/{store}/tags', [TagController::class, 'index']);
+    Route::post('stores/{store}/tags', [TagController::class, 'store']);
+    Route::put('tags/{tag}', [TagController::class, 'update']);
+    Route::delete('tags/{tag}', [TagController::class, 'destroy']);
+
+    Route::get('stores/{store}/segments', [SegmentController::class, 'index']);
+    Route::post('stores/{store}/segments', [SegmentController::class, 'store']);
+    Route::get('segments/{segment}', [SegmentController::class, 'show']);
+    Route::put('segments/{segment}', [SegmentController::class, 'update']);
+    Route::delete('segments/{segment}', [SegmentController::class, 'destroy']);
+    Route::post('segments/{segment}/preview', [SegmentController::class, 'preview']);
+
+    Route::post('stores/{store}/contact-imports', [ContactImportController::class, 'store']);
+    Route::get('contact-imports/{contactImport}', [ContactImportController::class, 'show']);
 });
