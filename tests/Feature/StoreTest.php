@@ -75,9 +75,40 @@ class StoreTest extends TestCase
             'name' => 'X', 'domain' => 'not a domain', 'platform' => 'magento', 'timezone' => 'Mars/Base', 'currency' => 'dollars',
         ])->assertUnprocessable()->assertJsonValidationErrors(['domain', 'platform', 'timezone', 'currency']);
 
+        $this->spa()->actingAs($admin)->postJson($url, [
+            'name' => 'External', 'domain' => 'evil.example.com',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['domain']);
+
+        $this->spa()->actingAs($admin)->postJson($url, [
+            'name' => 'Port', 'domain' => 'acme.myshopify.com:443',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['domain']);
+
+        $this->spa()->actingAs($admin)->postJson($url, [
+            'name' => 'Query', 'domain' => 'acme.myshopify.com?x=1',
+        ])->assertUnprocessable()->assertJsonValidationErrors(['domain']);
+
         $this->spa()->actingAs($admin)->postJson($url, ['name' => 'A', 'domain' => 'dup.myshopify.com'])->assertCreated();
         $this->spa()->actingAs($admin)->postJson($url, ['name' => 'B', 'domain' => 'dup.myshopify.com'])
             ->assertUnprocessable()->assertJsonValidationErrors('domain');
+    }
+
+    public function test_shopify_domain_is_normalized_and_external_hosts_rejected(): void
+    {
+        [$admin, $workspace] = $this->adminWithWorkspace();
+        $url = "/api/v1/workspaces/{$workspace->id}/stores";
+
+        $this->spa()->actingAs($admin)->postJson($url, [
+            'name' => 'Normalized',
+            'domain' => 'https://Cool-Shop.myshopify.com/admin',
+        ])->assertCreated()->assertJsonPath('data.domain', 'cool-shop.myshopify.com')
+            ->assertJsonPath('data.connection_status', 'pending');
+
+        foreach (['google.com', 'cool-shop.myshopify.com.evil.com', 'http://localhost', ''] as $bad) {
+            $this->spa()->actingAs($admin)->postJson($url, [
+                'name' => 'Bad',
+                'domain' => $bad,
+            ])->assertUnprocessable()->assertJsonValidationErrors(['domain']);
+        }
     }
 
     public function test_same_domain_allowed_in_different_workspaces(): void

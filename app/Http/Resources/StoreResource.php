@@ -21,6 +21,9 @@ class StoreResource extends JsonResource
             'is_demo' => $this->is_demo,
             // True only for a real, authorised connection. Demo stores are never "connected".
             'is_connected' => $this->isConnected(),
+            'shopify_shop_domain' => $this->shopify_shop_domain,
+            'shopify_scopes' => $this->shopify_scopes ?? [],
+            // Identity only — never expose access/refresh tokens here.
             'timezone' => $this->timezone,
             'currency' => $this->currency,
             'metadata' => $this->metadata,

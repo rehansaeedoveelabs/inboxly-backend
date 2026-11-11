@@ -1,26 +1,68 @@
 # Inboxly Backend
 
-Laravel REST API for Inboxly, a workspace-based Shopify marketing SaaS.
+Laravel REST API for **Inboxly**, a workspace-based Shopify marketing SaaS.
 
-## Stack
+This repository owns authentication, tenancy (workspaces and stores), Shopify connection lifecycle, and the Audience domain (contacts, consents, tags, segments, imports, exports). Campaigns, automations, and message sending are **not** implemented here yet.
 
-- PHP **8.4+**
-- Laravel **12**
-- MySQL **8+**
-- Laravel Sanctum (first-party SPA cookie authentication)
-- API prefix: `/api/v1`
+**Frontend (separate repository):** [inboxly-frontend](https://github.com/rehansaeedoveelabs/inboxly-frontend)
 
-Frontend (separate repository): Vite + React at `http://localhost:5173`.
+## Responsibilities
 
-## Requirements
+- Session-based SPA authentication via Laravel Sanctum
+- Workspace membership and Admin / Marketer authorization
+- Store creation, activation, and Shopify OAuth / webhooks / disconnect
+- Store-scoped contacts, tags, consents, restore + consent review
+- Rules-only audience segments with live preview
+- Background contact import and export jobs
+- Private CSV export storage and authorized download
 
-- PHP 8.4 with extensions: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`
-- Composer 2
-- MySQL listening on `127.0.0.1:3306`
-- Dedicated databases only:
-  - Application: `inboxly`
-  - Automated tests: `inboxly_testing`
-- Never point this app at Nexora, DataSyncAI, recovery dumps, or other shared databases
+## Technology stack
+
+| Component | Version / notes |
+|-----------|-----------------|
+| PHP | `^8.2` (`composer.json`); local docs target 8.4+ extensions |
+| Laravel | `^12` |
+| Sanctum | `^4.3` (cookie SPA auth, not API tokens for the SPA) |
+| Database | MySQL 8+ (`inboxly` app DB; `inboxly_testing` for PHPUnit) |
+| Queue | Database driver (`jobs` / `failed_jobs`) |
+| API prefix | `/api/v1` (`bootstrap/app.php`) |
+
+## Implemented capabilities (current)
+
+- Auth: register, login, logout, profile, password change, password reset, email verification links
+- Workspaces: create, list, show, update; member list; invitation **create** (accept flow not implemented)
+- Stores: create (real or demo), list, activate; soft-delete hooks exist (no HTTP delete/update routes)
+- Shopify: OAuth start/callback, reconnect, disconnect, uninstall + scopes webhooks, webhook registration job
+- Audience: contacts CRUD, tags, consents + events, soft-delete restore, consent-review gate
+- Segments: CRUD + preview (rules evaluated at query time)
+- Imports: JSON row payload → queued job (no multipart file upload)
+- Exports: queued CSV generation, history, secure download, daily prune
+
+See [docs/ROADMAP-AND-GAPS.md](docs/ROADMAP-AND-GAPS.md) for incomplete and planned work.
+
+## High-level architecture
+
+```mermaid
+flowchart LR
+  SPA["React SPA<br/>inboxly-frontend"] -->|Sanctum cookies<br/>/api/v1| API["Laravel API"]
+  API --> DB[(MySQL)]
+  API --> Q[(Database queue)]
+  Q --> Jobs["Import / Export / Webhook jobs"]
+  Jobs --> DB
+  Jobs --> Disk["Private local disk<br/>export CSVs"]
+  Shopify["Shopify"] <-->|OAuth + webhooks| API
+```
+
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+## Authentication and tenancy
+
+- SPA calls `GET /sanctum/csrf-cookie`, then mutates with `X-XSRF-TOKEN` and `credentials: 'include'`.
+- Do **not** store API tokens in `localStorage` for the first-party SPA.
+- Tenant boundary: **User → Workspace → Store → Audience data**.
+- Roles: `Admin` (workspace/stores/Shopify) and `Marketer` (audience). Enforced via policies and FormRequests.
+
+Details: [docs/SECURITY.md](docs/SECURITY.md), [docs/APPLICATION-FLOWS.md](docs/APPLICATION-FLOWS.md)
 
 ## Local setup
 
@@ -30,108 +72,53 @@ composer install
 php artisan key:generate
 ```
 
-Create MySQL databases (phpMyAdmin or CLI):
+Create dedicated MySQL databases (never point this app at unrelated shared databases):
 
 ```sql
 CREATE DATABASE inboxly CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE inboxly_testing CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-Set local credentials in `.env` (never commit `.env`):
+Configure `.env` from `.env.example` (never commit `.env`):
 
-```env
-DB_CONNECTION=mysql
-DB_HOST=127.0.0.1
-DB_PORT=3306
-DB_DATABASE=inboxly
-DB_USERNAME=root
-DB_PASSWORD=your-local-password
-
-FRONTEND_URL=http://localhost:5173
-SANCTUM_STATEFUL_DOMAINS=localhost:5173,127.0.0.1:5173,localhost:8000,127.0.0.1:8000
-CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
-```
-
-Run migrations against the application database only:
+- `DB_*` → database `inboxly`
+- `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS` → match the SPA origin
+- Shopify keys only when testing OAuth (`SHOPIFY_*`)
 
 ```bash
 php artisan migrate
-```
-
-Do **not** run `migrate:fresh` or `db:wipe` against shared or production data.
-
-## Development server
-
-```bash
 php artisan serve
 ```
 
-Default local API base: `http://localhost:8000`  
-Health check: `GET /up`
+- API: `http://localhost:8000`
+- Health: `GET /up`
 
-## SPA authentication flow (React)
+Do **not** run `migrate:fresh` / `db:wipe` against shared or production data.
 
-Sanctum cookie auth — **do not store API tokens in localStorage**.
+## Queues and scheduler
 
-1. `GET /sanctum/csrf-cookie` with `credentials: 'include'`
-2. `POST /api/v1/auth/login` or `/api/v1/auth/register` with `credentials: 'include'` and `X-XSRF-TOKEN`
-3. Call authenticated `/api/v1/*` endpoints with `credentials: 'include'`
-4. `POST /api/v1/auth/logout` with credentials
-
-Required browser/client settings:
-
-- Exact CORS origin match (`FRONTEND_URL` / `CORS_ALLOWED_ORIGINS`)
-- Credentials enabled
-- CSRF cookie + header for mutating requests
-
-Local HTTP cookie defaults:
-
-- `SESSION_SECURE_COOKIE=false`
-- `SESSION_SAME_SITE=lax`
-- `SESSION_HTTP_ONLY=true`
-
-Production HTTPS should set `SESSION_SECURE_COOKIE=true` and configure real domains.
-
-## Mail
-
-Development default: `MAIL_MAILER=log` (writes to `storage/logs`).
-
-Password reset and email verification use Laravel’s mail system. Configure SMTP later via:
-
-- `MAIL_MAILER=smtp`
-- `MAIL_HOST` / `MAIL_PORT` / `MAIL_USERNAME` / `MAIL_PASSWORD`
-- `MAIL_SCHEME` (for example `tls`)
-- `MAIL_FROM_ADDRESS` / `MAIL_FROM_NAME`
-
-## Queues
-
-Default: `QUEUE_CONNECTION=database` (uses `jobs` / `failed_jobs` tables).
-
-Optional worker (start only when needed):
+Imports, exports, and Shopify webhook registration require a worker:
 
 ```bash
-php artisan queue:work --tries=3
+php artisan queue:work
 ```
 
-## Cache and sessions
+Scheduled commands (`bootstrap/app.php`):
 
-Local defaults:
+- Hourly: `shopify:prune-oauth-states`
+- Daily: `contact-exports:prune`
 
-- `CACHE_STORE=database`
-- `SESSION_DRIVER=database`
-- `SESSION_LIFETIME=120`
+Locally, run the scheduler when testing those paths:
 
-Redis is optional and not required for local development.
+```bash
+php artisan schedule:work
+```
 
-## File storage
-
-- Default disk: `local` → `storage/app/private` (not publicly served)
-- Public assets (if needed later): `public` disk + `php artisan storage:link`
-- Production can switch to S3-compatible storage (`AWS_*` / `AWS_ENDPOINT` for R2)
+`DB_QUEUE_RETRY_AFTER` defaults to **360** seconds so it exceeds the export job timeout (**300**). See `.env.example` and `config/queue.php`.
 
 ## Tests
 
-PHPUnit is **forced** to MySQL database `inboxly_testing` in `phpunit.xml` (`force="true"`), so `.env` cannot accidentally target `inboxly`.
+PHPUnit is forced to `inboxly_testing` in `phpunit.xml` (`force="true"`).
 
 ```bash
 php artisan test
@@ -142,18 +129,24 @@ php artisan test
 ```bash
 php artisan about
 php artisan route:list --path=api/v1
-php artisan config:clear
 php artisan migrate:status
-php artisan test
+php artisan config:clear
 ```
+
+## Documentation
+
+| Document | Contents |
+|----------|----------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Layers, Shopify, queues, diagrams |
+| [docs/DATABASE.md](docs/DATABASE.md) | Tables, constraints, ER diagram |
+| [docs/APPLICATION-FLOWS.md](docs/APPLICATION-FLOWS.md) | End-to-end request flows |
+| [docs/SECURITY.md](docs/SECURITY.md) | AuthZ, isolation, encryption, gaps |
+| [docs/ROADMAP-AND-GAPS.md](docs/ROADMAP-AND-GAPS.md) | Implemented vs incomplete vs planned |
 
 ## Production checklist (deployment-dependent)
 
-- Set `APP_ENV=production` and `APP_DEBUG=false`
-- Use a strong unique `APP_KEY` (do not reuse local keys)
-- Configure production `APP_URL`, `FRONTEND_URL`, Sanctum stateful domains, and CORS origins
-- Enable `SESSION_SECURE_COOKIE=true` behind HTTPS
-- Configure real SMTP
-- Choose production queue/cache drivers
-- Configure S3/R2 if private object storage is required
+- `APP_ENV=production`, `APP_DEBUG=false`, unique `APP_KEY`
+- Real `APP_URL`, `FRONTEND_URL`, Sanctum stateful domains, CORS origins
+- `SESSION_SECURE_COOKIE=true` behind HTTPS
+- SMTP, queue worker, and cron/`schedule:run`
 - Never commit `.env` or credentials

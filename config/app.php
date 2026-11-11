@@ -55,11 +55,14 @@ return [
     'url' => env('APP_URL', 'http://localhost'),
 
     /*
-    | SPA origin. Used for CORS, email links (password reset, verification redirect)
-    | and as the default Sanctum stateful domain.
+    | SPA origin (FRONTEND_URL). Used for CORS, email links, Sanctum stateful
+    | domains, and Shopify OAuth browser redirects after /api/v1/shopify/oauth/callback.
+    | Local default: http://127.0.0.1:5173. For public HTTPS OAuth, set this to the
+    | frontend tunnel/origin (e.g. https://your-frontend.trycloudflare.com).
+    | Never derived from the request Host or Referer.
     */
 
-    'frontend_url' => env('FRONTEND_URL', 'http://localhost:5173'),
+    'frontend_url' => env('FRONTEND_URL', 'http://127.0.0.1:5173'),
 
     /*
     |--------------------------------------------------------------------------
