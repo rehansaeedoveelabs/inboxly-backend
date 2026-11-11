@@ -29,4 +29,20 @@ class StorePolicy
     {
         return $store->workspace->hasMember($user);
     }
+
+    /**
+     * Connecting Shopify changes platform credentials — Admin only.
+     */
+    public function connectShopify(User $user, Store $store): bool
+    {
+        return $store->workspace->isAdmin($user);
+    }
+
+    /**
+     * Disconnecting Shopify clears platform credentials — Admin only.
+     */
+    public function disconnectShopify(User $user, Store $store): bool
+    {
+        return $this->connectShopify($user, $store);
+    }
 }

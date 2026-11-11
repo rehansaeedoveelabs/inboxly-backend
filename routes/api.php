@@ -10,6 +10,9 @@ use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ContactImportController;
 use App\Http\Controllers\Api\V1\ContactTagController;
 use App\Http\Controllers\Api\V1\SegmentController;
+use App\Http\Controllers\Api\V1\Shopify\ShopifyConnectionController;
+use App\Http\Controllers\Api\V1\Shopify\ShopifyOAuthController;
+use App\Http\Controllers\Api\V1\Shopify\ShopifyWebhookController;
 use App\Http\Controllers\Api\V1\StoreActivationController;
 use App\Http\Controllers\Api\V1\StoreController;
 use App\Http\Controllers\Api\V1\TagController;
@@ -49,6 +52,22 @@ Route::prefix('auth')->group(function () {
     });
 });
 
+/*
+| Shopify OAuth callback — public (Shopify redirects the merchant browser here).
+| Full path: /api/v1/shopify/oauth/callback
+*/
+Route::get('shopify/oauth/callback', [ShopifyOAuthController::class, 'callback'])
+    ->middleware('throttle:60,1')
+    ->name('shopify.oauth.callback');
+
+/*
+| Shopify webhooks — public (verified via X-Shopify-Hmac-Sha256).
+| Full path: /api/v1/shopify/webhooks
+*/
+Route::post('shopify/webhooks', ShopifyWebhookController::class)
+    ->middleware('throttle:120,1')
+    ->name('shopify.webhooks');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('workspaces', [WorkspaceController::class, 'index']);
     Route::post('workspaces', [WorkspaceController::class, 'store']);
@@ -60,6 +79,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('workspaces/{workspace}/stores', [StoreController::class, 'index']);
     Route::post('workspaces/{workspace}/stores', [StoreController::class, 'store']);
     Route::post('stores/{store}/activate', StoreActivationController::class);
+
+    Route::get('stores/{store}/shopify/oauth/start', [ShopifyOAuthController::class, 'start'])
+        ->middleware('throttle:10,1')
+        ->name('shopify.oauth.start');
+
+    Route::delete('stores/{store}/shopify/connection', [ShopifyConnectionController::class, 'destroy'])
+        ->middleware('throttle:10,1')
+        ->name('shopify.connection.destroy');
 
     // Audience (Phase 2). Every handler authorises against the owning store's workspace.
     Route::get('stores/{store}/contacts', [ContactController::class, 'index']);

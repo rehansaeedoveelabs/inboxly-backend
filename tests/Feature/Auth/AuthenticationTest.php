@@ -154,6 +154,15 @@ class AuthenticationTest extends TestCase
         $this->spa()->postJson('/api/v1/stores/01ARZ3NDEKTSV4RRFFQ69G5FAV/activate')->assertUnauthorized();
     }
 
+    public function test_unauthenticated_api_request_without_json_accept_returns_401_json(): void
+    {
+        // Reproduces browser/proxy GETs that omit Accept: application/json.
+        // Must not attempt route('login') (which does not exist for this SPA API).
+        $this->get('/api/v1/auth/me')
+            ->assertUnauthorized()
+            ->assertJson(['message' => 'Unauthenticated.']);
+    }
+
     public function test_profile_can_be_updated_and_email_change_resets_verification(): void
     {
         Notification::fake();
