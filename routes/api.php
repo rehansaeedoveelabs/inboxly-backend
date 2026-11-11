@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\RegisterController;
 use App\Http\Controllers\Api\V1\Auth\SessionController;
+use App\Http\Controllers\Api\V1\CampaignController;
 use App\Http\Controllers\Api\V1\ContactConsentController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ContactExportController;
@@ -122,4 +123,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('contact-exports/{contactExport}', [ContactExportController::class, 'show']);
     Route::get('contact-exports/{contactExport}/download', [ContactExportController::class, 'download'])
         ->middleware('throttle:contact-exports');
+
+    Route::get('stores/{store}/campaigns/summary', [CampaignController::class, 'summary']);
+    Route::post('stores/{store}/campaigns/audience-preview', [CampaignController::class, 'audiencePreview']);
+    Route::get('stores/{store}/campaigns', [CampaignController::class, 'index']);
+    Route::post('stores/{store}/campaigns', [CampaignController::class, 'store']);
+    Route::get('campaigns/{campaign}', [CampaignController::class, 'show']);
+    Route::put('campaigns/{campaign}', [CampaignController::class, 'update']);
+    Route::delete('campaigns/{campaign}', [CampaignController::class, 'destroy']);
+    Route::post('campaigns/{campaign}/schedule', [CampaignController::class, 'schedule']);
+    Route::post('campaigns/{campaign}/unschedule', [CampaignController::class, 'unschedule']);
+    Route::post('campaigns/{campaign}/duplicate', [CampaignController::class, 'duplicate']);
 });
