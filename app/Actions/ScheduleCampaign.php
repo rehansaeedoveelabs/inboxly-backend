@@ -8,7 +8,6 @@ use App\Enums\CampaignStatus;
 use App\Models\Campaign;
 use App\Support\Campaigns\CampaignAudienceCounter;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -62,32 +61,30 @@ class ScheduleCampaign
 
     private function assertReadyToSchedule(Campaign $campaign): void
     {
-        $rules = [
-            'body' => ['required', 'string', 'min:1'],
-        ];
+        $errors = [];
 
-        if ($campaign->channel === CampaignChannel::Email) {
-            $rules['subject'] = ['required', 'string', 'min:1'];
+        $hasHtml = $campaign->channel === CampaignChannel::Email
+            && is_string($campaign->html_body)
+            && trim($campaign->html_body) !== '';
+        $hasBody = is_string($campaign->body) && trim($campaign->body) !== '';
+
+        if (! $hasHtml && ! $hasBody) {
+            $errors['body'] = ['Content is required before scheduling.'];
         }
 
-        $payload = [
-            'body' => is_string($campaign->body) ? trim($campaign->body) : $campaign->body,
-            'subject' => is_string($campaign->subject) ? trim($campaign->subject) : $campaign->subject,
-        ];
-
-        $validator = Validator::make($payload, $rules, [
-            'body.required' => 'Content is required before scheduling.',
-            'subject.required' => 'Subject is required for email campaigns.',
-        ]);
-
-        if ($validator->fails()) {
-            throw new ValidationException($validator);
+        if ($campaign->channel === CampaignChannel::Email) {
+            $subject = is_string($campaign->subject) ? trim($campaign->subject) : '';
+            if ($subject === '') {
+                $errors['subject'] = ['Subject is required for email campaigns.'];
+            }
         }
 
         if ($campaign->audience_type === CampaignAudienceType::Segment && blank($campaign->segment_id)) {
-            throw ValidationException::withMessages([
-                'segment_id' => ['A segment is required for this audience type.'],
-            ]);
+            $errors['segment_id'] = ['A segment is required for this audience type.'];
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
         }
     }
 }

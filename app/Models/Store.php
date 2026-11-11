@@ -126,6 +126,16 @@ class Store extends Model
         return $this->hasMany(Campaign::class);
     }
 
+    public function assets(): HasMany
+    {
+        return $this->hasMany(Asset::class);
+    }
+
+    public function emailTemplates(): HasMany
+    {
+        return $this->hasMany(EmailTemplate::class);
+    }
+
     public function isConnected(): bool
     {
         return ! $this->is_demo && $this->connection_status === StoreConnectionStatus::Connected;

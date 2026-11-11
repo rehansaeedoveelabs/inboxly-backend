@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\ApplyEmailTemplateToCampaign;
 use App\Actions\CreateCampaign;
 use App\Actions\DuplicateCampaign;
 use App\Actions\ScheduleCampaign;
@@ -18,10 +19,12 @@ use App\Http\Requests\Campaigns\ScheduleCampaignRequest;
 use App\Http\Requests\Campaigns\UpdateCampaignRequest;
 use App\Http\Resources\CampaignResource;
 use App\Models\Campaign;
+use App\Models\EmailTemplate;
 use App\Models\Segment;
 use App\Models\Store;
 use App\Support\Campaigns\CampaignAudienceCounter;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -163,5 +166,24 @@ class CampaignController extends Controller
         $copy = $duplicateCampaign->handle($campaign, request()->user());
 
         return (new CampaignResource($copy))->response()->setStatusCode(201);
+    }
+
+    public function applyTemplate(
+        Request $request,
+        Campaign $campaign,
+        ApplyEmailTemplateToCampaign $applyTemplate,
+    ): CampaignResource {
+        $this->authorize('update', $campaign);
+
+        $data = $request->validate([
+            'email_template_id' => ['required', 'string'],
+        ]);
+
+        $template = EmailTemplate::query()
+            ->where('store_id', $campaign->store_id)
+            ->whereKey($data['email_template_id'])
+            ->firstOrFail();
+
+        return new CampaignResource($applyTemplate->handle($campaign, $template));
     }
 }

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AssetController;
 use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
@@ -11,6 +12,7 @@ use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\ContactExportController;
 use App\Http\Controllers\Api\V1\ContactImportController;
 use App\Http\Controllers\Api\V1\ContactTagController;
+use App\Http\Controllers\Api\V1\EmailTemplateController;
 use App\Http\Controllers\Api\V1\SegmentController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyConnectionController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyOAuthController;
@@ -134,4 +136,19 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('campaigns/{campaign}/schedule', [CampaignController::class, 'schedule']);
     Route::post('campaigns/{campaign}/unschedule', [CampaignController::class, 'unschedule']);
     Route::post('campaigns/{campaign}/duplicate', [CampaignController::class, 'duplicate']);
+    Route::post('campaigns/{campaign}/apply-template', [CampaignController::class, 'applyTemplate']);
+
+    Route::get('stores/{store}/assets', [AssetController::class, 'index']);
+    Route::post('stores/{store}/assets', [AssetController::class, 'store']);
+    Route::get('assets/{asset}', [AssetController::class, 'show']);
+    Route::delete('assets/{asset}', [AssetController::class, 'destroy']);
+    Route::get('assets/{asset}/download', [AssetController::class, 'download']);
+
+    Route::get('stores/{store}/email-templates', [EmailTemplateController::class, 'index']);
+    Route::post('stores/{store}/email-templates', [EmailTemplateController::class, 'store']);
+    Route::post('stores/{store}/email-templates/preview', [EmailTemplateController::class, 'preview']);
+    Route::get('email-templates/{emailTemplate}', [EmailTemplateController::class, 'show']);
+    Route::put('email-templates/{emailTemplate}', [EmailTemplateController::class, 'update']);
+    Route::delete('email-templates/{emailTemplate}', [EmailTemplateController::class, 'destroy']);
+    Route::post('email-templates/{emailTemplate}/duplicate', [EmailTemplateController::class, 'duplicate']);
 });

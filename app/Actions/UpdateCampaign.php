@@ -4,17 +4,24 @@ namespace App\Actions;
 
 use App\Enums\CampaignAudienceType;
 use App\Enums\CampaignChannel;
+use App\Enums\CampaignContentFormat;
 use App\Models\Campaign;
+use App\Support\EmailTemplates\EmailBlockSchema;
+use App\Support\EmailTemplates\EmailDocumentRenderer;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 class UpdateCampaign
 {
+    public function __construct(private EmailDocumentRenderer $renderer) {}
+
     /**
      * @param  array{
      *     name?: string,
      *     subject?: ?string,
      *     preview_text?: ?string,
      *     body?: ?string,
+     *     content_document?: ?array<string, mixed>,
      *     audience_type?: CampaignAudienceType|string,
      *     segment_id?: ?string
      * }  $data
@@ -31,6 +38,34 @@ class UpdateCampaign
 
         if (array_key_exists('body', $data)) {
             $campaign->body = $data['body'];
+        }
+
+        if (array_key_exists('content_document', $data)) {
+            if ($campaign->channel !== CampaignChannel::Email) {
+                throw ValidationException::withMessages([
+                    'content_document' => ['HTML documents are only supported on email campaigns.'],
+                ]);
+            }
+
+            $document = $data['content_document'];
+            if ($document === null) {
+                $campaign->content_document = null;
+                $campaign->html_body = null;
+                $campaign->content_format = CampaignContentFormat::Plain;
+                $campaign->email_template_id = null;
+            } else {
+                $errors = EmailBlockSchema::validate($document);
+                if ($errors !== []) {
+                    throw ValidationException::withMessages(['content_document' => $errors]);
+                }
+
+                $html = $this->renderer->render($campaign->store, $document);
+                $campaign->content_document = $document;
+                $campaign->html_body = $html;
+                $campaign->content_format = CampaignContentFormat::Html;
+                $campaign->email_template_id = null;
+                $campaign->body = $this->plainTextFallback($html);
+            }
         }
 
         if (array_key_exists('audience_type', $data)) {
@@ -64,5 +99,16 @@ class UpdateCampaign
         $campaign->save();
 
         return $campaign->refresh();
+    }
+
+    private function plainTextFallback(?string $html): string
+    {
+        if ($html === null || $html === '') {
+            return '';
+        }
+
+        $text = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5);
+
+        return trim(preg_replace('/\s+/u', ' ', $text) ?? '');
     }
 }

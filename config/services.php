@@ -37,6 +37,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Brevo (email delivery — Phase 9)
+    |--------------------------------------------------------------------------
+    |
+    | REST API key from Brevo. Read only via config('services.brevo.api_key').
+    | Not used for campaign send until Phase 9 is implemented.
+    |
+    */
+    'brevo' => [
+        'api_key' => env('BREVO_API_KEY'),
+        'base_url' => env('BREVO_BASE_URL', 'https://api.brevo.com/v3'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Shopify (standalone SaaS OAuth)
     |--------------------------------------------------------------------------
     |

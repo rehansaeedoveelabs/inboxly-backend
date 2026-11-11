@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\CampaignAudienceType;
 use App\Enums\CampaignChannel;
+use App\Enums\CampaignContentFormat;
 use App\Enums\CampaignStatus;
 use Database\Factories\CampaignFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -19,7 +20,8 @@ class Campaign extends Model
 
     protected $fillable = [
         'store_id', 'created_by', 'name', 'channel', 'status',
-        'subject', 'preview_text', 'body', 'audience_type', 'segment_id',
+        'subject', 'preview_text', 'body', 'content_format', 'html_body',
+        'content_document', 'email_template_id', 'audience_type', 'segment_id',
         'scheduled_at', 'audience_count',
     ];
 
@@ -28,6 +30,8 @@ class Campaign extends Model
         return [
             'channel' => CampaignChannel::class,
             'status' => CampaignStatus::class,
+            'content_format' => CampaignContentFormat::class,
+            'content_document' => 'array',
             'audience_type' => CampaignAudienceType::class,
             'scheduled_at' => 'datetime',
             'audience_count' => 'integer',
@@ -47,6 +51,11 @@ class Campaign extends Model
     public function segment(): BelongsTo
     {
         return $this->belongsTo(Segment::class);
+    }
+
+    public function emailTemplate(): BelongsTo
+    {
+        return $this->belongsTo(EmailTemplate::class);
     }
 
     public function isDraft(): bool
