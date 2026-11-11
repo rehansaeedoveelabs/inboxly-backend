@@ -50,8 +50,12 @@ class UpsertContact
                 return $contact;
             }
 
+            // Preserve existing consents and consent_events. Restoration only clears
+            // deleted_at and sets the review gate so marketing stays blocked until review.
             if ($contact->trashed()) {
                 $contact->restore();
+                $contact->consent_review_required_at = now();
+                $contact->wasRestored = true;
             }
 
             $contact->fill($attributes)->save();

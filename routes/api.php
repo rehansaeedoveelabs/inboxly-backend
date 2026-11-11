@@ -94,7 +94,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('contacts/{contact}', [ContactController::class, 'show']);
     Route::put('contacts/{contact}', [ContactController::class, 'update']);
     Route::delete('contacts/{contact}', [ContactController::class, 'destroy']);
+    Route::post('contacts/{contact}/restore', [ContactController::class, 'restore'])->withTrashed();
     Route::put('contacts/{contact}/consents', [ContactConsentController::class, 'update']);
+    Route::post('contacts/{contact}/consent-review', [ContactConsentController::class, 'review']);
     Route::post('contacts/{contact}/tags', [ContactTagController::class, 'store']);
     Route::delete('contacts/{contact}/tags/{tag}', [ContactTagController::class, 'destroy']);
 

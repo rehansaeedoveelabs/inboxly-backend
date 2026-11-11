@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\ConsentChannel;
+use App\Enums\ConsentStatus;
 use Database\Factories\ContactFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -17,6 +19,12 @@ class Contact extends Model
     /** @use HasFactory<ContactFactory> */
     use HasFactory, HasUlids, SoftDeletes;
 
+    /**
+     * Transient flag set by UpsertContact / RestoreContact when a trashed row is restored.
+     * Not persisted — used by import counters.
+     */
+    public bool $wasRestored = false;
+
     protected $fillable = [
         'store_id', 'email', 'phone', 'first_name', 'last_name',
         'locale', 'timezone', 'source', 'metadata',
@@ -24,7 +32,32 @@ class Contact extends Model
 
     protected function casts(): array
     {
-        return ['metadata' => 'array'];
+        return [
+            'metadata' => 'array',
+            'consent_review_required_at' => 'datetime',
+        ];
+    }
+
+    /**
+     * Future campaign/send pipelines must call this before treating a contact as sendable.
+     * Segments remain rules-only and do not apply this gate.
+     */
+    public function requiresConsentReview(): bool
+    {
+        return $this->consent_review_required_at !== null;
+    }
+
+    public function isMarketingEligible(ConsentChannel $channel): bool
+    {
+        if ($this->trashed() || $this->requiresConsentReview()) {
+            return false;
+        }
+
+        $consent = $this->relationLoaded('consents')
+            ? $this->consents->first(fn ($c) => $c->channel === $channel)
+            : $this->consents()->where('channel', $channel)->first();
+
+        return $consent?->status === ConsentStatus::Subscribed;
     }
 
     /** Lower-cased, trimmed; empty becomes null so MySQL unique indexes allow many "no email" rows. */

@@ -53,17 +53,27 @@ class ProcessContactImportJob implements ShouldQueue
 
         $import->update([
             'status' => ContactImportStatus::Processing,
-            'processed_rows' => 0, 'created_count' => 0, 'updated_count' => 0, 'failed_rows' => 0,
+            'processed_rows' => 0,
+            'created_count' => 0,
+            'updated_count' => 0,
+            'restored_count' => 0,
+            'failed_rows' => 0,
             'error_summary' => null,
         ]);
 
         $errors = [];
-        $totals = ['processed_rows' => 0, 'created_count' => 0, 'updated_count' => 0, 'failed_rows' => 0];
+        $totals = [
+            'processed_rows' => 0,
+            'created_count' => 0,
+            'updated_count' => 0,
+            'restored_count' => 0,
+            'failed_rows' => 0,
+        ];
 
         try {
             foreach (array_chunk($rows, self::CHUNK_SIZE, true) as $chunk) {
                 DB::transaction(function () use ($chunk, $import, $store, $tagIds, $upsertContact, $attachTags, &$errors, &$totals) {
-                    $created = $updated = $failed = 0;
+                    $created = $updated = $restored = $failed = 0;
 
                     foreach ($chunk as $index => $row) {
                         $data = $this->validRow($store->getKey(), $row, $error);
@@ -76,7 +86,14 @@ class ProcessContactImportJob implements ShouldQueue
                         }
 
                         $contact = $upsertContact->handle($store, $data + ['source' => $data['source'] ?? 'import']);
-                        $contact->wasRecentlyCreated ? $created++ : $updated++;
+
+                        if ($contact->wasRecentlyCreated) {
+                            $created++;
+                        } elseif ($contact->wasRestored) {
+                            $restored++;
+                        } else {
+                            $updated++;
+                        }
 
                         if ($tagIds !== []) {
                             $attachTags->handle($contact, $tagIds);
@@ -86,6 +103,7 @@ class ProcessContactImportJob implements ShouldQueue
                     $totals['processed_rows'] += count($chunk);
                     $totals['created_count'] += $created;
                     $totals['updated_count'] += $updated;
+                    $totals['restored_count'] += $restored;
                     $totals['failed_rows'] += $failed;
 
                     // Same transaction as the upserts: progress is never ahead of the data.

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Actions\AttachTags;
 use App\Actions\UpsertContact;
+use App\Enums\ConsentChannel;
 use App\Jobs\ProcessContactImportJob;
 use App\Models\Contact;
 use App\Models\ContactImport;
@@ -57,6 +58,7 @@ class ContactImportTest extends TestCase
             ->assertJsonPath('data.processed_rows', 4)
             ->assertJsonPath('data.created_count', 1)
             ->assertJsonPath('data.updated_count', 2)
+            ->assertJsonPath('data.restored_count', 0)
             ->assertJsonPath('data.failed_rows', 1)
             ->assertJsonPath('data.original_filename', 'contacts.csv');
 
@@ -120,6 +122,8 @@ class ContactImportTest extends TestCase
         [$admin, $workspace] = $this->adminWithWorkspace();
         $store = $this->storeIn($workspace);
         $gone = $this->contactIn($store, ['email' => 'gone@example.com']);
+        $gone->consents()->where('channel', 'email')->update(['status' => 'subscribed']);
+        $eventCount = $gone->consentEvents()->count();
         $gone->delete();
         $this->contactIn($store, ['email' => 'owner@example.com', 'phone' => '+15550009999']);
 
@@ -130,10 +134,16 @@ class ContactImportTest extends TestCase
             ],
         ])->assertStatus(202)
             ->assertJsonPath('data.status', 'completed')
-            ->assertJsonPath('data.updated_count', 1)
+            ->assertJsonPath('data.updated_count', 0)
+            ->assertJsonPath('data.restored_count', 1)
             ->assertJsonPath('data.failed_rows', 1);
 
-        $this->assertNull($gone->fresh()->deleted_at);
+        $fresh = $gone->fresh()->load('consents');
+        $this->assertNull($fresh->deleted_at);
+        $this->assertNotNull($fresh->consent_review_required_at);
+        $this->assertSame('subscribed', $fresh->consents->firstWhere('channel', 'email')->status->value);
+        $this->assertSame($eventCount, $fresh->consentEvents()->count());
+        $this->assertFalse($fresh->isMarketingEligible(ConsentChannel::Email));
         $this->assertDatabaseMissing('contacts', ['email' => 'thief@example.com']);
     }
 

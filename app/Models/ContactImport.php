@@ -16,7 +16,7 @@ class ContactImport extends Model
 
     protected $fillable = [
         'store_id', 'user_id', 'status', 'original_filename', 'total_rows', 'processed_rows',
-        'created_count', 'updated_count', 'failed_rows', 'error_summary', 'options',
+        'created_count', 'updated_count', 'restored_count', 'failed_rows', 'error_summary', 'options',
     ];
 
     protected function casts(): array
@@ -28,6 +28,7 @@ class ContactImport extends Model
             'processed_rows' => 'integer',
             'created_count' => 'integer',
             'updated_count' => 'integer',
+            'restored_count' => 'integer',
             'failed_rows' => 'integer',
         ];
     }

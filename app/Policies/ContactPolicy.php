@@ -26,6 +26,16 @@ class ContactPolicy
         return $this->canManage($user, $contact);
     }
 
+    public function restore(User $user, Contact $contact): bool
+    {
+        return $this->canManage($user, $contact);
+    }
+
+    public function reviewConsents(User $user, Contact $contact): bool
+    {
+        return $this->canManage($user, $contact);
+    }
+
     private function canManage(User $user, Contact $contact): bool
     {
         $store = $contact->store;

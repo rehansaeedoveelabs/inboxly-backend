@@ -9,8 +9,11 @@ use Illuminate\Validation\Rule;
 
 /**
  * Shared contact validation. Email/phone are normalised before the unique checks so
- * "A@X.com " and "a@x.com" are the same contact. Uniqueness includes soft-deleted contacts
- * because the database unique index does too.
+ * "A@X.com " and "a@x.com" are the same contact.
+ *
+ * Create uniqueness checks active rows only so a soft-deleted match can return 409 /
+ * restore. Update uniqueness still includes soft-deleted rows because the database
+ * unique index does, and an update must not steal a trashed contact's identity.
  */
 abstract class ContactRequest extends FormRequest
 {
@@ -40,16 +43,26 @@ abstract class ContactRequest extends FormRequest
         $this->merge($normalized);
     }
 
-    /** @return array<string, mixed> */
-    protected function contactRules(bool $partial): array
+    /**
+     * @return array<string, mixed>
+     */
+    protected function contactRules(bool $partial, bool $uniqueIncludesTrashed = true): array
     {
         $store = $this->store();
         $ignore = $this->ignoredContact()?->getKey();
         $sometimes = $partial ? ['sometimes'] : [];
 
-        $unique = fn (string $column) => Rule::unique('contacts', $column)
-            ->where('store_id', $store->getKey())
-            ->ignore($ignore);
+        $unique = function (string $column) use ($store, $ignore, $uniqueIncludesTrashed) {
+            $rule = Rule::unique('contacts', $column)
+                ->where('store_id', $store->getKey())
+                ->ignore($ignore);
+
+            if (! $uniqueIncludesTrashed) {
+                $rule->whereNull('deleted_at');
+            }
+
+            return $rule;
+        };
 
         return [
             'email' => [...$sometimes, 'nullable', 'string', 'email:rfc', 'max:255', $unique('email')],

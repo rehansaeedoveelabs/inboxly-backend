@@ -22,6 +22,7 @@ class ContactImportResource extends JsonResource
             'processed_rows' => $this->processed_rows,
             'created_count' => $this->created_count,
             'updated_count' => $this->updated_count,
+            'restored_count' => $this->restored_count,
             'failed_rows' => $this->failed_rows,
             'error_summary' => $this->error_summary,
             'created_at' => $this->created_at,

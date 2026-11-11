@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\RestoreContact;
 use App\Actions\UpdateContact;
 use App\Actions\UpsertContact;
 use App\Enums\ConsentChannel;
@@ -50,7 +51,27 @@ class ContactController extends Controller
 
     public function store(CreateContactRequest $request, Store $store, UpsertContact $upsertContact): JsonResponse
     {
-        $contact = $upsertContact->handle($store, $request->validated() + ['source' => 'manual']);
+        $data = $request->validated();
+        $restore = (bool) ($data['restore'] ?? false);
+        unset($data['restore']);
+
+        if (! $restore) {
+            $trashed = $this->findTrashedMatch(
+                $store,
+                $data['email'] ?? null,
+                $data['phone'] ?? null,
+            );
+
+            if ($trashed !== null) {
+                return response()->json([
+                    'error' => 'contact_deleted',
+                    'message' => 'A deleted contact with this email or phone already exists. Restore it to continue.',
+                    'contact' => (new ContactResource($trashed->load(['tags', 'consents'])))->resolve(),
+                ], 409);
+            }
+        }
+
+        $contact = $upsertContact->handle($store, $data + ['source' => 'manual']);
 
         return (new ContactResource($contact->load(['tags', 'consents'])))->response()->setStatusCode(201);
     }
@@ -76,5 +97,35 @@ class ContactController extends Controller
         $contact->delete();
 
         return response()->noContent();
+    }
+
+    public function restore(Contact $contact, RestoreContact $restoreContact): JsonResponse
+    {
+        $this->authorize('restore', $contact);
+
+        $restored = $restoreContact->handle($contact);
+
+        return (new ContactResource($restored->load(['tags', 'consents'])))->response()->setStatusCode(200);
+    }
+
+    private function findTrashedMatch(Store $store, ?string $email, ?string $phone): ?Contact
+    {
+        $email = Contact::normalizeEmail($email);
+        $phone = Contact::normalizePhone($phone);
+
+        $base = Contact::onlyTrashed()->where('store_id', $store->getKey());
+
+        if ($email !== null) {
+            $match = (clone $base)->where('email', $email)->first();
+            if ($match !== null) {
+                return $match;
+            }
+        }
+
+        if ($phone !== null) {
+            return (clone $base)->where('phone', $phone)->first();
+        }
+
+        return null;
     }
 }

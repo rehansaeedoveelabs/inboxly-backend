@@ -18,9 +18,11 @@ class CreateContactRequest extends ContactRequest
 
     public function rules(): array
     {
-        $rules = $this->contactRules(partial: false);
+        // Active-only uniqueness: soft-deleted matches are handled as 409 / restore.
+        $rules = $this->contactRules(partial: false, uniqueIncludesTrashed: false);
         $rules['email'][] = 'required_without:phone';
         $rules['phone'][] = 'required_without:email';
+        $rules['restore'] = ['sometimes', 'boolean'];
 
         return $rules;
     }
