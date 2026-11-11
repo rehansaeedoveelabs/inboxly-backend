@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\Auth\RegisterController;
 use App\Http\Controllers\Api\V1\Auth\SessionController;
 use App\Http\Controllers\Api\V1\ContactConsentController;
 use App\Http\Controllers\Api\V1\ContactController;
+use App\Http\Controllers\Api\V1\ContactExportController;
 use App\Http\Controllers\Api\V1\ContactImportController;
 use App\Http\Controllers\Api\V1\ContactTagController;
 use App\Http\Controllers\Api\V1\SegmentController;
@@ -114,4 +115,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('stores/{store}/contact-imports', [ContactImportController::class, 'store']);
     Route::get('contact-imports/{contactImport}', [ContactImportController::class, 'show']);
+
+    Route::get('stores/{store}/contact-exports', [ContactExportController::class, 'index']);
+    Route::post('stores/{store}/contact-exports', [ContactExportController::class, 'store'])
+        ->middleware('throttle:contact-exports');
+    Route::get('contact-exports/{contactExport}', [ContactExportController::class, 'show']);
+    Route::get('contact-exports/{contactExport}/download', [ContactExportController::class, 'download'])
+        ->middleware('throttle:contact-exports');
 });

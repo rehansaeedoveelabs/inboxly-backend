@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withSchedule(function (Schedule $schedule): void {
         $schedule->command('shopify:prune-oauth-states')->hourly();
+        $schedule->command('contact-exports:prune')->daily();
     })
     ->withMiddleware(function (Middleware $middleware): void {
         // Sanctum SPA cookie auth: prepends EnsureFrontendRequestsAreStateful to the api group.

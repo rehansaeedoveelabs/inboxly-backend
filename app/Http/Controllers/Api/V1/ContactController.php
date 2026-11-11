@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\RestoreContact;
 use App\Actions\UpdateContact;
 use App\Actions\UpsertContact;
-use App\Enums\ConsentChannel;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Audience\CreateContactRequest;
 use App\Http\Requests\Audience\ListContactsRequest;
@@ -13,6 +12,7 @@ use App\Http\Requests\Audience\UpdateContactRequest;
 use App\Http\Resources\ContactResource;
 use App\Models\Contact;
 use App\Models\Store;
+use App\Support\Audience\ContactListQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
@@ -25,22 +25,16 @@ class ContactController extends Controller
      * Keyset ("cursor") pagination over (created_at desc, id desc), backed by the
      * (store_id, created_at, id) index. Pass the returned `meta.next_cursor` as `cursor`.
      */
-    public function index(ListContactsRequest $request, Store $store): AnonymousResourceCollection
-    {
+    public function index(
+        ListContactsRequest $request,
+        Store $store,
+        ContactListQuery $contactListQuery,
+    ): AnonymousResourceCollection {
         $filters = $request->validated();
 
-        $contacts = $store->contacts()
+        $contacts = $contactListQuery
+            ->forStore($store, $filters)
             ->with(['tags', 'consents'])
-            ->when($filters['q'] ?? null, function ($query, string $q) {
-                // Email prefix match (an exact email is a prefix of itself).
-                $query->where('email', 'like', addcslashes(mb_strtolower(trim($q)), '\\%_').'%');
-            })
-            ->when($filters['tag'] ?? null, fn ($query, string $slug) => $query->whereHas(
-                'tags', fn ($t) => $t->where('tags.slug', $slug),
-            ))
-            ->when($filters['consent_email'] ?? null, fn ($query, string $status) => $query->whereHas(
-                'consents', fn ($c) => $c->where('channel', ConsentChannel::Email->value)->where('status', $status),
-            ))
             ->orderByDesc('created_at')
             ->orderByDesc('id')
             ->cursorPaginate((int) ($filters['limit'] ?? self::DEFAULT_LIMIT))
