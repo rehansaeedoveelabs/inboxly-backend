@@ -28,8 +28,8 @@ class UpdateCampaign
      */
     public function handle(Campaign $campaign, array $data): Campaign
     {
-        if ($campaign->isScheduled()) {
-            throw new ConflictHttpException('Scheduled campaigns cannot be edited. Unschedule first.');
+        if ($campaign->isLocked()) {
+            throw new ConflictHttpException('Only draft campaigns can be edited.');
         }
 
         if (array_key_exists('name', $data)) {

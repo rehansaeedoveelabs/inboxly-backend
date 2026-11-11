@@ -41,6 +41,16 @@ class CampaignPolicy
         return $this->canManage($user, $campaign);
     }
 
+    public function send(User $user, Campaign $campaign): bool
+    {
+        return $this->canManage($user, $campaign);
+    }
+
+    public function testSend(User $user, Campaign $campaign): bool
+    {
+        return $this->canManage($user, $campaign);
+    }
+
     private function canManage(User $user, Campaign $campaign): bool
     {
         $store = $campaign->store;

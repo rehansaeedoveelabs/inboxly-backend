@@ -137,6 +137,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('campaigns/{campaign}/unschedule', [CampaignController::class, 'unschedule']);
     Route::post('campaigns/{campaign}/duplicate', [CampaignController::class, 'duplicate']);
     Route::post('campaigns/{campaign}/apply-template', [CampaignController::class, 'applyTemplate']);
+    Route::post('campaigns/{campaign}/send', [CampaignController::class, 'send']);
+    Route::post('campaigns/{campaign}/test-send', [CampaignController::class, 'testSend']);
 
     Route::get('stores/{store}/assets', [AssetController::class, 'index']);
     Route::post('stores/{store}/assets', [AssetController::class, 'store']);

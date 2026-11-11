@@ -47,6 +47,24 @@ return [
     'brevo' => [
         'api_key' => env('BREVO_API_KEY'),
         'base_url' => env('BREVO_BASE_URL', 'https://api.brevo.com/v3'),
+        // Shared Inboxly sending identity (Phase 9). Must be verified in Brevo.
+        'sender_email' => env('BREVO_SENDER_EMAIL'),
+        'sender_name' => env('BREVO_SENDER_NAME', env('APP_NAME', 'Inboxly')),
+        // Hard gate: false keeps BrevoEmailSender from calling the API.
+        'sending_enabled' => (bool) env('BREVO_SENDING_ENABLED', false),
+        'timeout_seconds' => (int) env('BREVO_TIMEOUT_SECONDS', 20),
+        'webhook_secret' => env('BREVO_WEBHOOK_SECRET'),
+    ],
+
+    'messaging' => [
+        // email_driver: fake | brevo
+        'email_driver' => env('MESSAGING_EMAIL_DRIVER', env('APP_ENV') === 'production' ? 'brevo' : 'fake'),
+        // sms_driver: disabled | fake (SMS provider deferred)
+        'sms_driver' => env('MESSAGING_SMS_DRIVER', 'disabled'),
+        'batch_size' => (int) env('CAMPAIGN_SEND_BATCH_SIZE', 100),
+        'max_attempts' => (int) env('CAMPAIGN_SEND_MAX_ATTEMPTS', 3),
+        // 0 = unlimited
+        'daily_cap_per_store' => (int) env('CAMPAIGN_DAILY_CAP_PER_STORE', 500),
     ],
 
     /*

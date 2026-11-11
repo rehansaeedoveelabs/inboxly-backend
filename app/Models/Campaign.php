@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Campaign extends Model
@@ -22,7 +23,8 @@ class Campaign extends Model
         'store_id', 'created_by', 'name', 'channel', 'status',
         'subject', 'preview_text', 'body', 'content_format', 'html_body',
         'content_document', 'email_template_id', 'audience_type', 'segment_id',
-        'scheduled_at', 'audience_count',
+        'scheduled_at', 'audience_count', 'sending_started_at', 'sent_at',
+        'sent_count', 'failed_count', 'skipped_count', 'send_error',
     ];
 
     protected function casts(): array
@@ -34,7 +36,12 @@ class Campaign extends Model
             'content_document' => 'array',
             'audience_type' => CampaignAudienceType::class,
             'scheduled_at' => 'datetime',
+            'sending_started_at' => 'datetime',
+            'sent_at' => 'datetime',
             'audience_count' => 'integer',
+            'sent_count' => 'integer',
+            'failed_count' => 'integer',
+            'skipped_count' => 'integer',
         ];
     }
 
@@ -58,6 +65,11 @@ class Campaign extends Model
         return $this->belongsTo(EmailTemplate::class);
     }
 
+    public function recipients(): HasMany
+    {
+        return $this->hasMany(CampaignRecipient::class);
+    }
+
     public function isDraft(): bool
     {
         return $this->status === CampaignStatus::Draft;
@@ -66,5 +78,10 @@ class Campaign extends Model
     public function isScheduled(): bool
     {
         return $this->status === CampaignStatus::Scheduled;
+    }
+
+    public function isLocked(): bool
+    {
+        return ! $this->status->isEditable();
     }
 }
