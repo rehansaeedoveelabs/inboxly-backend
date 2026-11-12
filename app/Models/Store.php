@@ -121,6 +121,11 @@ class Store extends Model
         return $this->hasMany(ContactExport::class);
     }
 
+    public function campaigns(): HasMany
+    {
+        return $this->hasMany(Campaign::class);
+    }
+
     public function isConnected(): bool
     {
         return ! $this->is_demo && $this->connection_status === StoreConnectionStatus::Connected;
