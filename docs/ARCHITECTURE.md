@@ -140,6 +140,23 @@ flowchart LR
 
 Database queue `retry_after` defaults to **360** (`config/queue.php`, `DB_QUEUE_RETRY_AFTER`) so it exceeds the export timeout.
 
+### Meta publishing timeouts (operators)
+
+| Knob | Default | Rule |
+|------|---------|------|
+| `ProcessMetaPublicationJob::$timeout` | 120s | Job wall clock |
+| `META_TIMEOUT_SECONDS` | 20s | Per Graph HTTP call |
+| `META_PUBLISH_LEASE_SECONDS` | 180s | Must exceed job timeout |
+| Queue worker `--timeout` | (operator) | Must be ≥ job timeout; keep `META_PUBLISH_LEASE_SECONDS` above worker timeout |
+
+Do not lower the lease below the job timeout. Atomic lease claims and lease-token ownership are unchanged.
+
+### Meta token health limitations
+
+- `data_access_expires_at` is persisted only when Meta `GET /debug_token` returns a positive unix timestamp. Zero or omitted values stay `null` (not treated as expired).
+- Inspection requires configured `META_APP_ID` + `META_APP_SECRET` (app access token). If inspection is unavailable, Inboxly does not invent expiry or invalidate the connection.
+- There is no proactive scheduled token monitor; expiry is enforced at OAuth persist, publish create, and Page-token preflight.
+
 ## Related docs
 
 - [DATABASE.md](DATABASE.md)

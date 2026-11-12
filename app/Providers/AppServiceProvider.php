@@ -8,6 +8,9 @@ use App\Support\Messaging\Contracts\SmsSender;
 use App\Support\Messaging\DisabledSmsSender;
 use App\Support\Messaging\FakeEmailSender;
 use App\Support\Messaging\FakeSmsSender;
+use App\Support\Meta\Contracts\MetaProvider;
+use App\Support\Meta\FakeMetaProvider;
+use App\Support\Meta\GraphMetaProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -33,6 +36,15 @@ class AppServiceProvider extends ServiceProvider
             return match ($driver) {
                 'fake' => $this->app->make(FakeSmsSender::class),
                 default => $this->app->make(DisabledSmsSender::class),
+            };
+        });
+
+        $this->app->singleton(MetaProvider::class, function () {
+            $driver = (string) config('services.meta.driver', 'fake');
+
+            return match ($driver) {
+                'meta' => $this->app->make(GraphMetaProvider::class),
+                default => $this->app->make(FakeMetaProvider::class),
             };
         });
     }
@@ -71,6 +83,12 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('brevo-webhooks', function (Request $request) {
             return Limit::perMinute(120)->by('brevo-webhooks|'.$request->ip());
+        });
+
+        RateLimiter::for('meta-oauth', function (Request $request) {
+            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+
+            return Limit::perMinute(10)->by('meta-oauth|'.$key);
         });
     }
 }

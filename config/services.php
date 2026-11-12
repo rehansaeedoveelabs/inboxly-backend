@@ -114,4 +114,52 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Meta / Facebook (Phase 10A — connection + Page selection)
+    |--------------------------------------------------------------------------
+    |
+    | Verified against Meta docs:
+    | - Login dialog: https://www.facebook.com/{version}/dialog/oauth
+    | - Code exchange + long-lived token: Graph /{version}/oauth/access_token
+    | - Page list: GET /{version}/me/accounts
+    | - Permissions: pages_show_list, pages_read_engagement, pages_manage_posts
+    |   (pages_manage_posts depends on pages_read_engagement + pages_show_list)
+    |
+    | driver=fake is the safe default. Real Graph calls require META_DRIVER=meta
+    | and a configured app id/secret/redirect. Production Page access for customer
+    | Pages also requires Meta App Review / Advanced Access — not granted by code.
+    |
+    */
+    'meta' => [
+        'driver' => env('META_DRIVER', 'fake'),
+        'app_id' => env('META_APP_ID'),
+        'app_secret' => env('META_APP_SECRET'),
+        'redirect_uri' => env('META_REDIRECT_URI'),
+        // Explicit Graph version (configurable). Default tracks a current documented version.
+        'graph_version' => env('META_GRAPH_VERSION', 'v25.0'),
+        'oauth_state_ttl' => (int) env('META_OAUTH_STATE_TTL', 600),
+        // Per Graph HTTP call timeout (OAuth, accounts, publish, feed, debug_token).
+        'timeout_seconds' => (int) env('META_TIMEOUT_SECONDS', 20),
+        // Skew when treating user_token_expires_at / data_access_expires_at as expired (seconds).
+        'token_expiry_skew_seconds' => (int) env('META_TOKEN_EXPIRY_SKEW_SECONDS', 120),
+        // Max publish attempts for transient Graph failures.
+        'publish_max_attempts' => (int) env('META_PUBLISH_MAX_ATTEMPTS', 3),
+        // Must exceed ProcessMetaPublicationJob::$timeout (120s) so a healthy worker
+        // cannot lose its lease mid-flight. Operators: keep META_PUBLISH_LEASE_SECONDS
+        // > queue worker --timeout for this job.
+        'publish_lease_seconds' => (int) env('META_PUBLISH_LEASE_SECONDS', 180),
+        // Legacy env retained for compatibility. Fake publishing is hard-denied outside
+        // local/testing regardless of this flag (see MetaDriverGuard).
+        'allow_fake_publish' => (bool) env('META_ALLOW_FAKE_PUBLISH', false),
+        // Comma-separated Login scopes. Order does not matter to Meta.
+        'scopes' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env(
+                'META_SCOPES',
+                'pages_show_list,pages_read_engagement,pages_manage_posts'
+            ))
+        ))),
+    ],
+
 ];

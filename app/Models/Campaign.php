@@ -25,6 +25,7 @@ class Campaign extends Model
         'content_document', 'email_template_id', 'audience_type', 'segment_id',
         'scheduled_at', 'audience_count', 'sending_started_at', 'sent_at',
         'sent_count', 'failed_count', 'skipped_count', 'send_error',
+        'meta_message', 'meta_link', 'meta_asset_id',
     ];
 
     protected function casts(): array
@@ -68,6 +69,16 @@ class Campaign extends Model
     public function recipients(): HasMany
     {
         return $this->hasMany(CampaignRecipient::class);
+    }
+
+    public function metaPublications(): HasMany
+    {
+        return $this->hasMany(CampaignMetaPublication::class);
+    }
+
+    public function metaAsset(): BelongsTo
+    {
+        return $this->belongsTo(Asset::class, 'meta_asset_id');
     }
 
     public function isDraft(): bool
