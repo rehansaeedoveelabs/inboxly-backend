@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
 use App\Http\Controllers\Api\V1\Auth\RegisterController;
 use App\Http\Controllers\Api\V1\Auth\SessionController;
+use App\Http\Controllers\Api\V1\BrevoWebhookController;
 use App\Http\Controllers\Api\V1\CampaignController;
 use App\Http\Controllers\Api\V1\ContactConsentController;
 use App\Http\Controllers\Api\V1\ContactController;
@@ -72,6 +73,16 @@ Route::post('shopify/webhooks', ShopifyWebhookController::class)
     ->middleware('throttle:120,1')
     ->name('shopify.webhooks');
 
+/*
+| Brevo transactional webhooks — public, authenticated via Bearer token
+| configured on the Brevo webhook (BREVO_WEBHOOK_SECRET).
+| Docs: https://developers.brevo.com/docs/secured-webhooks
+| Full path: /api/v1/brevo/webhooks
+*/
+Route::post('brevo/webhooks', BrevoWebhookController::class)
+    ->middleware('throttle:brevo-webhooks')
+    ->name('brevo.webhooks');
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('workspaces', [WorkspaceController::class, 'index']);
     Route::post('workspaces', [WorkspaceController::class, 'store']);
@@ -137,8 +148,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('campaigns/{campaign}/unschedule', [CampaignController::class, 'unschedule']);
     Route::post('campaigns/{campaign}/duplicate', [CampaignController::class, 'duplicate']);
     Route::post('campaigns/{campaign}/apply-template', [CampaignController::class, 'applyTemplate']);
-    Route::post('campaigns/{campaign}/send', [CampaignController::class, 'send']);
-    Route::post('campaigns/{campaign}/test-send', [CampaignController::class, 'testSend']);
+    Route::post('campaigns/{campaign}/send', [CampaignController::class, 'send'])
+        ->middleware('throttle:campaign-send');
+    Route::post('campaigns/{campaign}/test-send', [CampaignController::class, 'testSend'])
+        ->middleware('throttle:campaign-test-send');
 
     Route::get('stores/{store}/assets', [AssetController::class, 'index']);
     Route::post('stores/{store}/assets', [AssetController::class, 'store']);

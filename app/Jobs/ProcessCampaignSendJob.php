@@ -13,6 +13,7 @@ use App\Support\Messaging\Contracts\EmailSender;
 use App\Support\Messaging\Contracts\SmsSender;
 use App\Support\Messaging\OutboundMessage;
 use App\Support\Messaging\SendResult;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
@@ -37,12 +38,23 @@ class ProcessCampaignSendJob implements ShouldQueue
             return;
         }
 
+        $this->reclaimExpiredLeases($campaign);
+
         $batchSize = max(1, (int) config('services.messaging.batch_size', 100));
         $maxAttempts = max(1, (int) config('services.messaging.max_attempts', 3));
 
         $recipients = CampaignRecipient::query()
             ->where('campaign_id', $campaign->getKey())
-            ->where('status', CampaignRecipientStatus::Pending)
+            ->where(function ($query) {
+                $query->where('status', CampaignRecipientStatus::Pending)
+                    ->orWhere(function ($queued) {
+                        $queued->where('status', CampaignRecipientStatus::Queued)
+                            ->where(function ($lease) {
+                                $lease->whereNull('lease_expires_at')
+                                    ->orWhere('lease_expires_at', '<=', now());
+                            });
+                    });
+            })
             ->orderBy('id')
             ->limit($batchSize)
             ->get();
@@ -57,10 +69,18 @@ class ProcessCampaignSendJob implements ShouldQueue
             $this->processRecipient($campaign, $recipient, $emailSender, $smsSender, $maxAttempts);
         }
 
-        // Continue until pending recipients are exhausted.
         if (CampaignRecipient::query()
             ->where('campaign_id', $campaign->getKey())
-            ->where('status', CampaignRecipientStatus::Pending)
+            ->where(function ($query) {
+                $query->where('status', CampaignRecipientStatus::Pending)
+                    ->orWhere(function ($queued) {
+                        $queued->where('status', CampaignRecipientStatus::Queued)
+                            ->where(function ($lease) {
+                                $lease->whereNull('lease_expires_at')
+                                    ->orWhere('lease_expires_at', '<=', now());
+                            });
+                    });
+            })
             ->exists()) {
             self::dispatch($campaign->getKey());
 
@@ -70,6 +90,22 @@ class ProcessCampaignSendJob implements ShouldQueue
         $this->finalize($campaign->fresh());
     }
 
+    private function reclaimExpiredLeases(Campaign $campaign): void
+    {
+        DB::table('campaign_recipients')
+            ->where('campaign_id', $campaign->getKey())
+            ->where('status', CampaignRecipientStatus::Queued->value)
+            ->where(function ($query) {
+                $query->whereNull('lease_expires_at')
+                    ->orWhere('lease_expires_at', '<=', now());
+            })
+            ->update([
+                'status' => CampaignRecipientStatus::Pending->value,
+                'lease_expires_at' => null,
+                'updated_at' => now(),
+            ]);
+    }
+
     private function processRecipient(
         Campaign $campaign,
         CampaignRecipient $recipient,
@@ -77,12 +113,25 @@ class ProcessCampaignSendJob implements ShouldQueue
         SmsSender $smsSender,
         int $maxAttempts,
     ): void {
-        // Claim pending → queued to avoid duplicate workers sending the same row.
+        $leaseSeconds = max(30, (int) config('services.messaging.recipient_lease_seconds', 120));
+        $leaseExpires = CarbonImmutable::now('UTC')->addSeconds($leaseSeconds);
+
+        // Atomic claim: pending OR expired queued lease → active queued lease.
         $claimed = DB::table('campaign_recipients')
             ->where('id', $recipient->getKey())
-            ->where('status', CampaignRecipientStatus::Pending->value)
+            ->where(function ($query) {
+                $query->where('status', CampaignRecipientStatus::Pending->value)
+                    ->orWhere(function ($queued) {
+                        $queued->where('status', CampaignRecipientStatus::Queued->value)
+                            ->where(function ($lease) {
+                                $lease->whereNull('lease_expires_at')
+                                    ->orWhere('lease_expires_at', '<=', now());
+                            });
+                    });
+            })
             ->update([
                 'status' => CampaignRecipientStatus::Queued->value,
+                'lease_expires_at' => $leaseExpires,
                 'updated_at' => now(),
             ]);
 
@@ -150,12 +199,13 @@ class ProcessCampaignSendJob implements ShouldQueue
             $recipient->forceFill([
                 'status' => CampaignRecipientStatus::Sent,
                 'provider' => $campaign->channel === CampaignChannel::Email
-                    ? (string) config('services.messaging.email_driver', 'brevo')
+                    ? (string) config('services.messaging.email_driver', 'fake')
                     : (string) config('services.messaging.sms_driver', 'disabled'),
                 'provider_message_id' => $result->providerMessageId,
                 'error_code' => null,
                 'error_message' => null,
                 'sent_at' => now(),
+                'lease_expires_at' => null,
             ])->save();
 
             return;
@@ -164,6 +214,7 @@ class ProcessCampaignSendJob implements ShouldQueue
         if ($result->retryable && $attempts < $maxAttempts) {
             $recipient->forceFill([
                 'status' => CampaignRecipientStatus::Pending,
+                'lease_expires_at' => null,
                 'error_code' => $result->errorCode,
                 'error_message' => $result->errorMessage,
             ])->save();
@@ -189,6 +240,7 @@ class ProcessCampaignSendJob implements ShouldQueue
             'status' => $status,
             'error_code' => $code,
             'error_message' => mb_substr($message, 0, 900),
+            'lease_expires_at' => null,
         ])->save();
     }
 
@@ -198,15 +250,17 @@ class ProcessCampaignSendJob implements ShouldQueue
             return;
         }
 
+        $this->reclaimExpiredLeases($campaign);
+
         $sent = $campaign->recipients()->where('status', CampaignRecipientStatus::Sent)->count();
         $failed = $campaign->recipients()->where('status', CampaignRecipientStatus::Failed)->count();
         $skipped = $campaign->recipients()->where('status', CampaignRecipientStatus::Skipped)->count();
-        $pending = $campaign->recipients()->whereIn('status', [
+        $open = $campaign->recipients()->whereIn('status', [
             CampaignRecipientStatus::Pending,
             CampaignRecipientStatus::Queued,
         ])->count();
 
-        if ($pending > 0) {
+        if ($open > 0) {
             return;
         }
 
@@ -214,7 +268,7 @@ class ProcessCampaignSendJob implements ShouldQueue
             $sent > 0 && $failed === 0 => CampaignStatus::Sent,
             $sent > 0 && $failed > 0 => CampaignStatus::PartiallySent,
             $sent === 0 && $failed > 0 => CampaignStatus::Failed,
-            default => CampaignStatus::Sent, // zero audience / all skipped
+            default => CampaignStatus::Sent,
         };
 
         $campaign->forceFill([

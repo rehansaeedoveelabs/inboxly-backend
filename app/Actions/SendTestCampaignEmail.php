@@ -11,7 +11,8 @@ use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 /**
- * Sends a one-off preview to the authenticated user's email (not the campaign audience).
+ * Sends a one-off preview to the authenticated user's verified email only.
+ * Never fans out to the campaign audience.
  */
 class SendTestCampaignEmail
 {
@@ -20,7 +21,7 @@ class SendTestCampaignEmail
     /**
      * @return array{accepted: bool, provider_message_id: ?string, to: string, error_code: ?string, error_message: ?string}
      */
-    public function handle(Campaign $campaign, User $user, ?string $overrideTo = null): array
+    public function handle(Campaign $campaign, User $user): array
     {
         if ($campaign->channel !== CampaignChannel::Email) {
             throw ValidationException::withMessages([
@@ -32,13 +33,16 @@ class SendTestCampaignEmail
             throw new ConflictHttpException('Cannot test-send while the campaign is scheduled or sending.');
         }
 
-        $to = $overrideTo !== null && trim($overrideTo) !== ''
-            ? mb_strtolower(trim($overrideTo))
-            : mb_strtolower(trim((string) $user->email));
+        if (! $user->hasVerifiedEmail()) {
+            throw ValidationException::withMessages([
+                'email' => ['Verify your account email before sending a test message.'],
+            ]);
+        }
 
+        $to = mb_strtolower(trim((string) $user->email));
         if ($to === '' || ! filter_var($to, FILTER_VALIDATE_EMAIL)) {
             throw ValidationException::withMessages([
-                'to' => ['A valid destination email is required for test send.'],
+                'email' => ['Your verified account email is required for test send.'],
             ]);
         }
 

@@ -2,6 +2,7 @@
 
 namespace App\Actions;
 
+use App\Enums\CampaignChannel;
 use App\Enums\CampaignStatus;
 use App\Jobs\ProcessCampaignSendJob;
 use App\Models\Campaign;
@@ -28,6 +29,12 @@ class StartCampaignSend
 
         if (! in_array($campaign->status, [CampaignStatus::Draft, CampaignStatus::Scheduled], true)) {
             throw new ConflictHttpException('Only draft or scheduled campaigns can be sent.');
+        }
+
+        if ($campaign->channel === CampaignChannel::Sms) {
+            throw ValidationException::withMessages([
+                'channel' => ['SMS sending is not available yet.'],
+            ]);
         }
 
         $this->assertReady($campaign);

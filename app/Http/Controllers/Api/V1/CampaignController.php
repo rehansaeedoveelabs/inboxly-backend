@@ -209,11 +209,7 @@ class CampaignController extends Controller
     ): JsonResponse {
         $this->authorize('testSend', $campaign);
 
-        $data = $request->validate([
-            'to' => ['sometimes', 'nullable', 'email', 'max:255'],
-        ]);
-
-        $result = $sendTest->handle($campaign, $request->user(), $data['to'] ?? null);
+        $result = $sendTest->handle($campaign, $request->user());
 
         return response()->json(['data' => $result], $result['accepted'] ? 200 : 422);
     }

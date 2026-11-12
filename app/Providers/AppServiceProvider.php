@@ -56,5 +56,21 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute(10)->by('contact-exports|'.$key);
         });
+
+        RateLimiter::for('campaign-send', function (Request $request) {
+            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+
+            return Limit::perMinute(5)->by('campaign-send|'.$key);
+        });
+
+        RateLimiter::for('campaign-test-send', function (Request $request) {
+            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+
+            return Limit::perMinute(10)->by('campaign-test-send|'.$key);
+        });
+
+        RateLimiter::for('brevo-webhooks', function (Request $request) {
+            return Limit::perMinute(120)->by('brevo-webhooks|'.$request->ip());
+        });
     }
 }

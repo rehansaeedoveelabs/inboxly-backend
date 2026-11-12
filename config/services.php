@@ -53,16 +53,20 @@ return [
         // Hard gate: false keeps BrevoEmailSender from calling the API.
         'sending_enabled' => (bool) env('BREVO_SENDING_ENABLED', false),
         'timeout_seconds' => (int) env('BREVO_TIMEOUT_SECONDS', 20),
+        // Bearer token configured on the Brevo webhook (auth.type=bearer). Required for webhook intake.
+        // Docs: https://developers.brevo.com/docs/secured-webhooks
         'webhook_secret' => env('BREVO_WEBHOOK_SECRET'),
     ],
 
     'messaging' => [
-        // email_driver: fake | brevo
-        'email_driver' => env('MESSAGING_EMAIL_DRIVER', env('APP_ENV') === 'production' ? 'brevo' : 'fake'),
+        // email_driver: fake | brevo — always defaults to fake; real sends need explicit env + BREVO_SENDING_ENABLED.
+        'email_driver' => env('MESSAGING_EMAIL_DRIVER', 'fake'),
         // sms_driver: disabled | fake (SMS provider deferred)
         'sms_driver' => env('MESSAGING_SMS_DRIVER', 'disabled'),
         'batch_size' => (int) env('CAMPAIGN_SEND_BATCH_SIZE', 100),
         'max_attempts' => (int) env('CAMPAIGN_SEND_MAX_ATTEMPTS', 3),
+        // Claim lease for queued recipients (seconds). Expired leases may be safely reclaimed.
+        'recipient_lease_seconds' => (int) env('CAMPAIGN_RECIPIENT_LEASE_SECONDS', 120),
         // 0 = unlimited
         'daily_cap_per_store' => (int) env('CAMPAIGN_DAILY_CAP_PER_STORE', 500),
     ],

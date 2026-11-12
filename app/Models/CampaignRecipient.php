@@ -15,7 +15,7 @@ class CampaignRecipient extends Model
     protected $fillable = [
         'campaign_id', 'contact_id', 'channel', 'address', 'status',
         'provider', 'provider_message_id', 'error_code', 'error_message',
-        'attempts', 'sent_at',
+        'attempts', 'sent_at', 'lease_expires_at',
     ];
 
     protected function casts(): array
@@ -25,6 +25,7 @@ class CampaignRecipient extends Model
             'status' => CampaignRecipientStatus::class,
             'attempts' => 'integer',
             'sent_at' => 'datetime',
+            'lease_expires_at' => 'datetime',
         ];
     }
 
