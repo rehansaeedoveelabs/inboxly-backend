@@ -103,6 +103,7 @@ erDiagram
 
 - `shopify_oauth_states`: unique `state`; prune indexes for expiry/consumed cleanup
 - `shopify_webhook_deliveries`: unique `webhook_id` for replay protection
+- `shopify_compliance_requests`: durable privacy webhook work; `processing_lease_expires_at` / `processing_lease_token` for crash-safe reclaim; append-only `shopify_compliance_request_events` (`restrictOnDelete` on parent). Ops: [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md).
 
 ## Foreign-key behavior (summary)
 

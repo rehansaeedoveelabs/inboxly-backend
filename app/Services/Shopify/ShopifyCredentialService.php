@@ -74,6 +74,30 @@ class ShopifyCredentialService
     }
 
     /**
+     * Query Shopify for the live granted access scope handles for this install.
+     * Uses a refreshed access token. Does not change connection status or clear credentials.
+     *
+     * @return list<string>
+     *
+     * @throws ShopifyCredentialException
+     */
+    public function fetchLiveAccessScopes(Store $store): array
+    {
+        $accessToken = $this->ensureValidAccessToken($store);
+        $shopDomain = (string) $store->fresh()?->shopify_shop_domain;
+
+        if ($shopDomain === '') {
+            throw new ShopifyCredentialException(
+                'This store has no Shopify shop domain.',
+                'shop_domain_missing',
+                permanent: true,
+            );
+        }
+
+        return $this->client->fetchGrantedAccessScopes($shopDomain, $accessToken);
+    }
+
+    /**
      * Force a refresh even when the access token is still within the skew window.
      * Intended for tests and explicit operational recovery — not request hot paths.
      *
@@ -175,7 +199,15 @@ class ShopifyCredentialService
             throw $e;
         }
 
-        $scopes = $this->parseScopes($payload['scope'] ?? '');
+        // Missing/empty scope on refresh is not revocation — keep prior grants.
+        $rawScope = $payload['scope'] ?? null;
+        $scopes = null;
+        if (is_string($rawScope) && trim($rawScope) !== '') {
+            $parsed = $this->parseScopes($rawScope);
+            if ($parsed !== []) {
+                $scopes = $parsed;
+            }
+        }
 
         try {
             $this->persistRotatedCredentials($store, $payload, $scopes);
@@ -213,21 +245,26 @@ class ShopifyCredentialService
      *     expires_in: int,
      *     refresh_token_expires_in: int
      * }  $payload
-     * @param  list<string>  $scopes
+     * @param  list<string>|null  $scopes  null = leave existing granted scopes unchanged
      */
-    protected function persistRotatedCredentials(Store $store, array $payload, array $scopes): void
+    protected function persistRotatedCredentials(Store $store, array $payload, ?array $scopes): void
     {
         DB::transaction(function () use ($store, $payload, $scopes) {
             /** @var Store $locked */
             $locked = Store::query()->whereKey($store->getKey())->lockForUpdate()->firstOrFail();
 
-            $locked->rotateShopifyCredentials([
+            $credentials = [
                 'access_token' => $payload['access_token'],
                 'refresh_token' => $payload['refresh_token'],
                 'access_token_expires_at' => now()->addSeconds($payload['expires_in']),
                 'refresh_token_expires_at' => now()->addSeconds($payload['refresh_token_expires_in']),
-                'scopes' => $scopes,
-            ]);
+            ];
+
+            if ($scopes !== null) {
+                $credentials['scopes'] = $scopes;
+            }
+
+            $locked->rotateShopifyCredentials($credentials);
         });
     }
 

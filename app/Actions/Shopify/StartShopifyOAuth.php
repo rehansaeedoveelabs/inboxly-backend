@@ -7,6 +7,7 @@ use App\Models\ShopifyOauthState;
 use App\Models\Store;
 use App\Models\User;
 use App\Support\Shopify\ShopifyDomain;
+use App\Support\Shopify\ShopifyScopes;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -87,6 +88,14 @@ class StartShopifyOAuth
             ]);
         }
 
+        try {
+            $scopeString = ShopifyScopes::authorizeScopeString();
+        } catch (InvalidArgumentException) {
+            throw ValidationException::withMessages([
+                'shopify' => ['Shopify OAuth scopes are misconfigured.'],
+            ]);
+        }
+
         $state = Str::random(64);
         $ttl = (int) config('services.shopify.oauth_state_ttl', 600);
 
@@ -98,9 +107,6 @@ class StartShopifyOAuth
             'shop_domain' => $normalizedShop,
             'expires_at' => now()->addSeconds($ttl),
         ]);
-
-        $scopes = config('services.shopify.scopes', []);
-        $scopeString = is_array($scopes) ? implode(',', $scopes) : '';
 
         return 'https://'.$normalizedShop.'/admin/oauth/authorize?'.http_build_query([
             'client_id' => $clientId,

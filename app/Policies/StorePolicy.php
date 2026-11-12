@@ -47,6 +47,22 @@ class StorePolicy
     }
 
     /**
+     * Viewing Shopify privacy-compliance request status — Admin only.
+     */
+    public function viewShopifyCompliance(User $user, Store $store): bool
+    {
+        return $this->connectShopify($user, $store);
+    }
+
+    /**
+     * Retrying failed Shopify privacy-compliance processing — Admin only.
+     */
+    public function retryShopifyCompliance(User $user, Store $store): bool
+    {
+        return $this->connectShopify($user, $store);
+    }
+
+    /**
      * Connecting Meta changes platform credentials — Admin only.
      */
     public function connectMeta(User $user, Store $store): bool

@@ -2,8 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Exceptions\ShopifyCredentialException;
 use App\Exceptions\ShopifyWebhookRegistrationException;
 use App\Models\Store;
+use App\Services\Shopify\ShopifyCredentialService;
 use App\Services\Shopify\ShopifyWebhookRegistrar;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -28,7 +30,7 @@ class RegisterShopifyWebhooksJob implements ShouldQueue
 
     public function __construct(public readonly string $storeId) {}
 
-    public function handle(ShopifyWebhookRegistrar $registrar): void
+    public function handle(ShopifyWebhookRegistrar $registrar, ShopifyCredentialService $credentials): void
     {
         $store = Store::query()->find($this->storeId);
         if ($store === null || $store->trashed() || ! $store->hasShopifyCredentials()) {
@@ -38,10 +40,29 @@ class RegisterShopifyWebhooksJob implements ShouldQueue
         $this->persistRegistrationStatus($store, 'pending', [], 'registration_started');
 
         try {
-            $confirmed = $registrar->registerRequiredTopics(
-                $store,
-                (string) $store->shopify_access_token,
+            // Always refresh/validate before Admin GraphQL — never use a stale raw token.
+            $accessToken = $credentials->ensureValidAccessToken($store);
+            $confirmed = $registrar->registerRequiredTopics($store->fresh() ?? $store, $accessToken);
+        } catch (ShopifyCredentialException $e) {
+            $this->persistRegistrationStatus(
+                $store->fresh() ?? $store,
+                'failed',
+                [],
+                $e->reasonCode,
             );
+
+            Log::warning('Shopify webhook registration credential failure.', [
+                'store_id' => $store->getKey(),
+                'reason' => $e->reasonCode,
+                'permanent' => $e->permanent,
+                'attempt' => $this->attempts(),
+            ]);
+
+            if ($e->permanent) {
+                return;
+            }
+
+            throw $e;
         } catch (ShopifyWebhookRegistrationException $e) {
             $this->persistRegistrationStatus(
                 $store->fresh() ?? $store,

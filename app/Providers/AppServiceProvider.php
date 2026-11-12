@@ -11,6 +11,7 @@ use App\Support\Messaging\FakeSmsSender;
 use App\Support\Meta\Contracts\MetaProvider;
 use App\Support\Meta\FakeMetaProvider;
 use App\Support\Meta\GraphMetaProvider;
+use App\Support\Shopify\ShopifyComplianceRuntimeGuard;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -52,6 +53,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Password::defaults(fn () => Password::min(8));
+
+        // M1 compliance: warn on unsafe lease/queue/pcntl posture (does not read worker CLI flags).
+        ShopifyComplianceRuntimeGuard::evaluate(log: true);
 
         // Login / register: per email + IP so one user cannot lock out another IP.
         RateLimiter::for('auth', function (Request $request) {

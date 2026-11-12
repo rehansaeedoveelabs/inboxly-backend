@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\V1\Meta\MetaConnectionController;
 use App\Http\Controllers\Api\V1\Meta\MetaOAuthController;
 use App\Http\Controllers\Api\V1\Meta\MetaPageController;
 use App\Http\Controllers\Api\V1\SegmentController;
+use App\Http\Controllers\Api\V1\Shopify\ShopifyComplianceRequestController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyConnectionController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyOAuthController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyWebhookController;
@@ -114,6 +115,14 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('stores/{store}/shopify/connection', [ShopifyConnectionController::class, 'destroy'])
         ->middleware('throttle:10,1')
         ->name('shopify.connection.destroy');
+
+    Route::get('stores/{store}/shopify/compliance-requests', [ShopifyComplianceRequestController::class, 'index'])
+        ->name('shopify.compliance-requests.index');
+    Route::get('stores/{store}/shopify/compliance-requests/{complianceRequest}', [ShopifyComplianceRequestController::class, 'show'])
+        ->name('shopify.compliance-requests.show');
+    Route::post('stores/{store}/shopify/compliance-requests/{complianceRequest}/retry', [ShopifyComplianceRequestController::class, 'retry'])
+        ->middleware('throttle:10,1')
+        ->name('shopify.compliance-requests.retry');
 
     Route::get('stores/{store}/meta/oauth/start', [MetaOAuthController::class, 'start'])
         ->middleware('throttle:meta-oauth')

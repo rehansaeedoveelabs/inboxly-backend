@@ -79,6 +79,86 @@ class ShopifyTokenRefreshTest extends TestCase
         });
     }
 
+    public function test_refresh_with_empty_scope_preserves_existing_grants(): void
+    {
+        $prior = ['read_customers', 'read_products', 'read_orders', 'read_all_orders'];
+        $store = $this->connectedStore('refresh-shop.myshopify.com', [
+            'shopify_scopes' => $prior,
+        ]);
+        $store->forceFill([
+            'shopify_access_token_expires_at' => now()->addSeconds(30),
+            'shopify_refresh_token' => 'shprt_keep_scopes',
+        ])->save();
+
+        Http::fake([
+            'https://refresh-shop.myshopify.com/admin/oauth/access_token' => Http::response(
+                $this->tokenPayload(['scope' => '']),
+                200,
+            ),
+        ]);
+
+        app(ShopifyCredentialService::class)->ensureValidAccessToken($store->fresh());
+
+        $fresh = $store->fresh();
+        $this->assertSame($prior, $fresh->shopify_scopes);
+        $this->assertSame('shpat_rotated_access', $fresh->shopify_access_token);
+        $this->assertSame(StoreConnectionStatus::Connected, $fresh->connection_status);
+    }
+
+    public function test_refresh_with_missing_scope_preserves_existing_grants(): void
+    {
+        $prior = ['read_customers', 'read_products'];
+        $store = $this->connectedStore('refresh-shop.myshopify.com', [
+            'shopify_scopes' => $prior,
+        ]);
+        $store->forceFill([
+            'shopify_access_token_expires_at' => now()->addSeconds(30),
+            'shopify_refresh_token' => 'shprt_missing_scope',
+        ])->save();
+
+        $payload = $this->tokenPayload();
+        unset($payload['scope']);
+
+        Http::fake([
+            'https://refresh-shop.myshopify.com/admin/oauth/access_token' => Http::response($payload, 200),
+        ]);
+
+        app(ShopifyCredentialService::class)->ensureValidAccessToken($store->fresh());
+
+        $fresh = $store->fresh();
+        $this->assertSame($prior, $fresh->shopify_scopes);
+        $this->assertSame('shpat_rotated_access', $fresh->shopify_access_token);
+    }
+
+    public function test_refresh_with_non_empty_scope_persists_returned_grants(): void
+    {
+        $store = $this->connectedStore('refresh-shop.myshopify.com', [
+            'shopify_scopes' => ['read_products'],
+        ]);
+        $store->forceFill([
+            'shopify_access_token_expires_at' => now()->addSeconds(30),
+            'shopify_refresh_token' => 'shprt_new_scopes',
+        ])->save();
+
+        Http::fake([
+            'https://refresh-shop.myshopify.com/admin/oauth/access_token' => Http::response(
+                $this->tokenPayload([
+                    'scope' => 'read_customers,read_products,read_orders,read_all_orders',
+                ]),
+                200,
+            ),
+        ]);
+
+        app(ShopifyCredentialService::class)->ensureValidAccessToken($store->fresh());
+
+        $this->assertSame([
+            'read_customers',
+            'read_products',
+            'read_orders',
+            'read_all_orders',
+        ], $store->fresh()->shopify_scopes);
+    }
+
     public function test_no_refresh_when_access_token_sufficiently_valid(): void
     {
         $store = $this->connectedStore();
@@ -269,7 +349,7 @@ class ShopifyTokenRefreshTest extends TestCase
 
         $service = new class(app(\App\Services\Shopify\ShopifyOAuthClient::class)) extends ShopifyCredentialService
         {
-            protected function persistRotatedCredentials(Store $store, array $payload, array $scopes): void
+            protected function persistRotatedCredentials(Store $store, array $payload, ?array $scopes): void
             {
                 throw new \RuntimeException('simulated persistence failure');
             }

@@ -1,5 +1,12 @@
 <?php
 
+$shopifyRequiredScopes = [
+    'read_customers',
+    'read_products',
+    'read_orders',
+    'read_all_orders',
+];
+
 return [
 
     /*
@@ -77,17 +84,29 @@ return [
     |--------------------------------------------------------------------------
     |
     | Read these only via config('services.shopify.*') so `php artisan
-    | config:cache` remains safe. Scopes start empty for the connection
-    | foundation — no customer, order, or product catalogue access yet.
+    | config:cache` remains safe.
+    |
+    | required_scopes: Inboxly commerce baseline (Phase 11A). Used for
+    | missing-scope / reauth checks. Granted scopes on each store come only
+    | from Shopify (OAuth token response, refresh, or scopes_update webhook).
+    |
+    | scopes: requested on the OAuth authorize URL via SHOPIFY_SCOPES.
+    | Unset → required_scopes. Explicit empty/whitespace → [] (OAuth start
+    | rejects before redirect). Custom lists must include every required scope.
+    | read_all_orders requires Partner approval and per-store merchant
+    | authorization after reconnect. Protected customer data access is a
+    | separate Shopify approval.
     |
     */
     'shopify' => [
         'client_id' => env('SHOPIFY_CLIENT_ID'),
         'app_secret' => env('SHOPIFY_APP_SECRET'),
-        'scopes' => array_values(array_filter(array_map(
-            'trim',
-            explode(',', (string) env('SHOPIFY_SCOPES', ''))
-        ))),
+        'required_scopes' => $shopifyRequiredScopes,
+        // env() without a default: null when unset; '' when explicitly empty.
+        'scopes' => \App\Support\Shopify\ShopifyScopes::requestedFromEnv(
+            env('SHOPIFY_SCOPES'),
+            $shopifyRequiredScopes,
+        ),
         'redirect_uri' => env('SHOPIFY_REDIRECT_URI'),
         // Matches the Shopify app API version (Dev Dashboard).
         'api_version' => '2026-10',
@@ -112,6 +131,16 @@ return [
             'APP_UNINSTALLED',
             'APP_SCOPES_UPDATE',
         ],
+        // Lease is derived from ProcessShopifyComplianceRequestJob::$timeout (120), NOT from an
+        // arbitrary `queue:work --timeout`. Claim enforces max(config, jobTimeout+60).
+        // Staging: pcntl required so job timeout is enforced; database queue with retry_after
+        // > job timeout (default DB_QUEUE_RETRY_AFTER=360). See M1-COMPLIANCE-OPERATIONS.md.
+        'compliance_processing_lease_seconds' => (int) env('SHOPIFY_COMPLIANCE_PROCESSING_LEASE_SECONDS', 300),
+        // Stranded `received` rows older than this are eligible for rediscovery.
+        'compliance_recover_received_older_than_seconds' => (int) env('SHOPIFY_COMPLIANCE_RECOVER_RECEIVED_OLDER_THAN', 60),
+        'compliance_recover_limit' => (int) env('SHOPIFY_COMPLIANCE_RECOVER_LIMIT', 50),
+        // Ops report: age threshold for "old received" (inspection only — not alerting).
+        'compliance_ops_received_older_than_seconds' => (int) env('SHOPIFY_COMPLIANCE_OPS_RECEIVED_OLDER_THAN', 3600),
     ],
 
     /*

@@ -61,10 +61,12 @@ Admin DELETE connection → best-effort remote revoke → clear local credential
 ### Webhooks
 
 1. Verify `X-Shopify-Hmac-Sha256` over raw body.
-2. Insert `shopify_webhook_deliveries` by unique `webhook_id` (duplicate → 200 no-op).
-3. `app/uninstalled` → clear credentials / disconnected; `app/scopes_update` → update scopes.
+2. Reject non-JSON `Content-Type` when present (`application/json` + optional charset allowed; missing Content-Type allowed).
+3. Insert `shopify_webhook_deliveries` by unique `webhook_id` (duplicate → 200 no-op).
+4. `app/uninstalled` → clear credentials / disconnected; `app/scopes_update` → update scopes.
+5. Compliance topics (`customers/data_request`, `customers/redact`, `shop/redact`) → durable `shopify_compliance_requests` + leased `ProcessShopifyComplianceRequestJob`. Delivery `processed_at` ≠ privacy completion. Ops: [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md).
 
-**Gap:** `ShopifyCredentialService` refresh helpers are not called from controllers/jobs/scheduler.
+**Phase 11A.0:** `RegisterShopifyWebhooksJob` obtains tokens via `ShopifyCredentialService::ensureValidAccessToken`. Store API exposes `missing_shopify_scopes` / `requires_shopify_reauth` from granted scopes (never assumes requested scopes were approved). Customer/product/order sync still not implemented.
 
 ## 5. Contact management
 
