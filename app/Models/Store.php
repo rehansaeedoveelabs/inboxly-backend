@@ -136,6 +136,11 @@ class Store extends Model
         return $this->hasMany(EmailTemplate::class);
     }
 
+    public function suppressions(): HasMany
+    {
+        return $this->hasMany(Suppression::class);
+    }
+
     public function isConnected(): bool
     {
         return ! $this->is_demo && $this->connection_status === StoreConnectionStatus::Connected;

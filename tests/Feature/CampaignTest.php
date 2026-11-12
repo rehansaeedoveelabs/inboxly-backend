@@ -83,7 +83,14 @@ class CampaignTest extends TestCase
 
         $this->spa()->actingAs($admin)->getJson("/api/v1/stores/{$store->id}/campaigns/summary")
             ->assertOk()
-            ->assertExactJson(['total' => 2, 'draft' => 2, 'scheduled' => 0]);
+            ->assertExactJson([
+                'total' => 2,
+                'draft' => 2,
+                'scheduled' => 0,
+                'sending' => 0,
+                'sent' => 0,
+                'failed' => 0,
+            ]);
 
         $this->spa()->actingAs($admin)->deleteJson("/api/v1/campaigns/{$smsId}")->assertNoContent();
         $this->assertSoftDeleted('campaigns', ['id' => $smsId]);
@@ -264,7 +271,14 @@ class CampaignTest extends TestCase
 
         $this->spa()->actingAs($admin)->getJson("/api/v1/stores/{$store->id}/campaigns/summary")
             ->assertOk()
-            ->assertExactJson(['total' => 1, 'draft' => 1, 'scheduled' => 0]);
+            ->assertExactJson([
+                'total' => 1,
+                'draft' => 1,
+                'scheduled' => 0,
+                'sending' => 0,
+                'sent' => 0,
+                'failed' => 0,
+            ]);
     }
 
     public function test_duplicate_creates_draft_copy(): void

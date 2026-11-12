@@ -40,6 +40,9 @@
         <env name="DB_USERNAME" value="root" force="true"/>
         <env name="DB_URL" value="" force="true"/>
         <env name="MAIL_MAILER" value="array"/>
+        <env name="MESSAGING_EMAIL_DRIVER" value="fake" force="true"/>
+        <env name="MESSAGING_SMS_DRIVER" value="fake" force="true"/>
+        <env name="BREVO_SENDING_ENABLED" value="false" force="true"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="SESSION_SECURE_COOKIE" value="false"/>

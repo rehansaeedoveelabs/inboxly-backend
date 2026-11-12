@@ -47,12 +47,22 @@ class CampaignAudienceCounter
 
         $consentChannel = $channel->toConsentChannel()->value;
 
+        $contactsTable = (new Contact)->getTable();
+
         return $query
-            ->whereNull('consent_review_required_at')
+            ->whereNull($contactsTable.'.consent_review_required_at')
             ->whereHas('consents', function (Builder $consents) use ($consentChannel) {
                 $consents
                     ->where('channel', $consentChannel)
                     ->where('status', ConsentStatus::Subscribed->value);
+            })
+            ->whereNotExists(function ($sub) use ($store, $channel, $contactsTable) {
+                $addressColumn = $channel === CampaignChannel::Email ? 'email' : 'phone';
+                $sub->selectRaw('1')
+                    ->from('suppressions')
+                    ->whereColumn('suppressions.address', $contactsTable.'.'.$addressColumn)
+                    ->where('suppressions.store_id', $store->getKey())
+                    ->where('suppressions.channel', $channel->value);
             });
     }
 }

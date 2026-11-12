@@ -6,6 +6,8 @@ use App\Actions\ApplyEmailTemplateToCampaign;
 use App\Actions\CreateCampaign;
 use App\Actions\DuplicateCampaign;
 use App\Actions\ScheduleCampaign;
+use App\Actions\SendTestCampaignEmail;
+use App\Actions\StartCampaignSend;
 use App\Actions\UnscheduleCampaign;
 use App\Actions\UpdateCampaign;
 use App\Enums\CampaignAudienceType;
@@ -76,6 +78,12 @@ class CampaignController extends Controller
             'total' => (clone $base)->count(),
             'draft' => (clone $base)->where('status', CampaignStatus::Draft)->count(),
             'scheduled' => (clone $base)->where('status', CampaignStatus::Scheduled)->count(),
+            'sending' => (clone $base)->where('status', CampaignStatus::Sending)->count(),
+            'sent' => (clone $base)->whereIn('status', [
+                CampaignStatus::Sent,
+                CampaignStatus::PartiallySent,
+            ])->count(),
+            'failed' => (clone $base)->where('status', CampaignStatus::Failed)->count(),
         ]);
     }
 
@@ -185,5 +193,24 @@ class CampaignController extends Controller
             ->firstOrFail();
 
         return new CampaignResource($applyTemplate->handle($campaign, $template));
+    }
+
+    public function send(Campaign $campaign, StartCampaignSend $startCampaignSend): CampaignResource
+    {
+        $this->authorize('send', $campaign);
+
+        return new CampaignResource($startCampaignSend->handle($campaign));
+    }
+
+    public function testSend(
+        Request $request,
+        Campaign $campaign,
+        SendTestCampaignEmail $sendTest,
+    ): JsonResponse {
+        $this->authorize('testSend', $campaign);
+
+        $result = $sendTest->handle($campaign, $request->user());
+
+        return response()->json(['data' => $result], $result['accepted'] ? 200 : 422);
     }
 }

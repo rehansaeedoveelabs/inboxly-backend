@@ -29,6 +29,12 @@ class CampaignResource extends JsonResource
             'segment_id' => $this->segment_id,
             'scheduled_at' => $this->scheduled_at,
             'audience_count' => $this->audience_count,
+            'sending_started_at' => $this->sending_started_at,
+            'sent_at' => $this->sent_at,
+            'sent_count' => $this->sent_count,
+            'failed_count' => $this->failed_count,
+            'skipped_count' => $this->skipped_count,
+            'send_error' => $this->send_error,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

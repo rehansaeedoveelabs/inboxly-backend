@@ -17,8 +17,8 @@ class ApplyEmailTemplateToCampaign
 {
     public function handle(Campaign $campaign, EmailTemplate $template): Campaign
     {
-        if ($campaign->isScheduled()) {
-            throw new ConflictHttpException('Scheduled campaigns cannot be edited. Unschedule first.');
+        if ($campaign->isLocked()) {
+            throw new ConflictHttpException('Only draft campaigns can be edited.');
         }
 
         if ($campaign->channel !== CampaignChannel::Email) {

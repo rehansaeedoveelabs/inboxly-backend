@@ -2,6 +2,12 @@
 
 namespace App\Providers;
 
+use App\Support\Messaging\BrevoEmailSender;
+use App\Support\Messaging\Contracts\EmailSender;
+use App\Support\Messaging\Contracts\SmsSender;
+use App\Support\Messaging\DisabledSmsSender;
+use App\Support\Messaging\FakeEmailSender;
+use App\Support\Messaging\FakeSmsSender;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -12,7 +18,23 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        $this->app->singleton(EmailSender::class, function () {
+            $driver = (string) config('services.messaging.email_driver', 'fake');
+
+            return match ($driver) {
+                'brevo' => $this->app->make(BrevoEmailSender::class),
+                default => $this->app->make(FakeEmailSender::class),
+            };
+        });
+
+        $this->app->singleton(SmsSender::class, function () {
+            $driver = (string) config('services.messaging.sms_driver', 'disabled');
+
+            return match ($driver) {
+                'fake' => $this->app->make(FakeSmsSender::class),
+                default => $this->app->make(DisabledSmsSender::class),
+            };
+        });
     }
 
     public function boot(): void
@@ -34,6 +56,21 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute(10)->by('contact-exports|'.$key);
         });
+
+        RateLimiter::for('campaign-send', function (Request $request) {
+            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+
+            return Limit::perMinute(5)->by('campaign-send|'.$key);
+        });
+
+        RateLimiter::for('campaign-test-send', function (Request $request) {
+            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+
+            return Limit::perMinute(10)->by('campaign-test-send|'.$key);
+        });
+
+        RateLimiter::for('brevo-webhooks', function (Request $request) {
+            return Limit::perMinute(120)->by('brevo-webhooks|'.$request->ip());
+        });
     }
 }
-
