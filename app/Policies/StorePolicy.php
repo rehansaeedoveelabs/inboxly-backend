@@ -45,4 +45,53 @@ class StorePolicy
     {
         return $this->connectShopify($user, $store);
     }
+
+    /**
+     * Viewing Shopify privacy-compliance request status — Admin only.
+     */
+    public function viewShopifyCompliance(User $user, Store $store): bool
+    {
+        return $this->connectShopify($user, $store);
+    }
+
+    /**
+     * Retrying failed Shopify privacy-compliance processing — Admin only.
+     */
+    public function retryShopifyCompliance(User $user, Store $store): bool
+    {
+        return $this->connectShopify($user, $store);
+    }
+
+    /**
+     * Connecting Meta changes platform credentials — Admin only.
+     */
+    public function connectMeta(User $user, Store $store): bool
+    {
+        return $store->workspace->isAdmin($user);
+    }
+
+    /**
+     * Disconnecting Meta clears platform credentials — Admin only.
+     */
+    public function disconnectMeta(User $user, Store $store): bool
+    {
+        return $this->connectMeta($user, $store);
+    }
+
+    /**
+     * Viewing Meta connection status/pages — any workspace member.
+     */
+    public function viewMetaConnection(User $user, Store $store): bool
+    {
+        return $this->view($user, $store);
+    }
+
+    /**
+     * Discovering/selecting Pages — any workspace member (marketing work).
+     * Credential connect/disconnect remains admin-only.
+     */
+    public function manageMetaPages(User $user, Store $store): bool
+    {
+        return $this->manageAudience($user, $store);
+    }
 }

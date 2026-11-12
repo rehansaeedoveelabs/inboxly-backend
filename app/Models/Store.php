@@ -154,6 +154,73 @@ class Store extends Model
     }
 
     /**
+     * Scopes Shopify actually granted for this installation (never the requested list).
+     *
+     * @return list<string>
+     */
+    public function grantedShopifyScopes(): array
+    {
+        $scopes = is_array($this->shopify_scopes) ? $this->shopify_scopes : [];
+
+        return array_values(array_filter(array_map(
+            static fn ($scope) => is_string($scope) ? trim($scope) : '',
+            $scopes,
+        ), static fn (string $scope) => $scope !== ''));
+    }
+
+    public function hasShopifyScope(string $scope): bool
+    {
+        return in_array($scope, $this->grantedShopifyScopes(), true);
+    }
+
+    /**
+     * Inboxly commerce baseline from config (Phase 11A).
+     *
+     * @return list<string>
+     */
+    public function requiredShopifyScopes(): array
+    {
+        $required = config('services.shopify.required_scopes', []);
+        if (! is_array($required)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map(
+            static fn ($scope) => is_string($scope) ? trim($scope) : '',
+            $required,
+        ), static fn (string $scope) => $scope !== ''));
+    }
+
+    /**
+     * Required scopes not present in the store's granted Shopify scopes.
+     * Missing permissions never invent grants and never clear credentials.
+     *
+     * @return list<string>
+     */
+    public function missingShopifyScopes(): array
+    {
+        $granted = $this->grantedShopifyScopes();
+
+        return array_values(array_filter(
+            $this->requiredShopifyScopes(),
+            static fn (string $scope) => ! in_array($scope, $granted, true),
+        ));
+    }
+
+    /**
+     * Connected install that still needs merchant reauthorization for required scopes.
+     * Does not disconnect the store or invalidate tokens.
+     */
+    public function requiresShopifyReauth(): bool
+    {
+        if (! $this->isConnected() || ! $this->hasShopifyCredentials()) {
+            return false;
+        }
+
+        return $this->missingShopifyScopes() !== [];
+    }
+
+    /**
      * True when the access token is missing an expiry or will expire within the skew window.
      */
     public function accessTokenNeedsRefresh(?int $skewSeconds = null): bool
@@ -209,6 +276,10 @@ class Store extends Model
 
     /**
      * Persist a rotated offline token pair without clearing shop identity.
+     *
+     * When `scopes` is omitted, previously granted scopes are preserved.
+     * Callers must omit the key (not pass []) when Shopify returns no scope
+     * string on refresh — an empty list is not treated as "unchanged".
      *
      * @param  array{
      *     access_token: string,

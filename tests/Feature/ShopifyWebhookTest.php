@@ -346,7 +346,10 @@ class ShopifyWebhookTest extends TestCase
         $store = $this->connectedStore();
 
         $job = new RegisterShopifyWebhooksJob($store->getKey());
-        $job->handle(app(ShopifyWebhookRegistrar::class));
+        $job->handle(
+            app(ShopifyWebhookRegistrar::class),
+            app(\App\Services\Shopify\ShopifyCredentialService::class),
+        );
 
         $fresh = $store->fresh();
         $this->assertSame('failed', data_get($fresh->metadata, 'shopify_webhooks.status'));
@@ -367,7 +370,10 @@ class ShopifyWebhookTest extends TestCase
         $job = new RegisterShopifyWebhooksJob($store->getKey());
 
         try {
-            $job->handle(app(ShopifyWebhookRegistrar::class));
+            $job->handle(
+                app(ShopifyWebhookRegistrar::class),
+                app(\App\Services\Shopify\ShopifyCredentialService::class),
+            );
             $this->fail('Expected ShopifyWebhookRegistrationException.');
         } catch (ShopifyWebhookRegistrationException $e) {
             $this->assertFalse($e->permanent);

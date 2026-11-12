@@ -35,6 +35,9 @@ class CampaignResource extends JsonResource
             'failed_count' => $this->failed_count,
             'skipped_count' => $this->skipped_count,
             'send_error' => $this->send_error,
+            'meta_message' => $this->meta_message,
+            'meta_link' => $this->meta_link,
+            'meta_asset_id' => $this->meta_asset_id,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

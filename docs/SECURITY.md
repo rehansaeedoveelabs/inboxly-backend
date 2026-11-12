@@ -73,21 +73,38 @@ Defined in `AppServiceProvider`:
 
 Inline throttles also protect Shopify OAuth start/callback/webhooks and email verification resend. There is **no** global authenticated API throttle.
 
+## Privacy and Shopify customer data
+
+- Soft-deleting a contact retains PII and related consents/events; soft delete is **not** privacy erasure.
+- Consent events are append-only in Eloquent but hard-delete of a contact still cascades at the database FK.
+- Contact export CSVs on the private disk expire after `ContactExport::EXPIRY_DAYS` (7) when prune runs; that constant is an application TTL, not a legal retention schedule.
+- Shopify customer sync is **not** implemented. Storing synchronized Shopify customer PII remains gated on privacy/compliance **production** readiness (Partner subscription activation, legal decisions, ops backups). See [PRIVACY-DATA-INVENTORY.md](PRIVACY-DATA-INVENTORY.md).
+- Compliance webhook **intake and processing** for `customers/data_request`, `customers/redact`, and `shop/redact` are implemented in-app (HMAC, durable requests, queued processors with processing leases, Admin APIs). `shopify_webhook_deliveries.processed_at` means delivery **accepted**, not privacy work completed — completion lives on `shopify_compliance_requests`.
+- HTTPS deliveries with a non-JSON `Content-Type` are rejected after HMAC; `application/json` (optional charset) and missing Content-Type remain accepted.
+- Processing uses a configurable lease (`SHOPIFY_COMPLIANCE_PROCESSING_LEASE_SECONDS`, default 300). Expired-lease `processing` and stranded `received` are rediscovered by scheduled `shopify:recover-compliance-requests` (not an alerting system). See [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md).
+- NULL-store / NULL-workspace compliance rows are invisible to workspace Admin APIs (no cross-tenant exposure). Escalate via ops report; do not invent domain→workspace ownership.
+- Production/staging compliance webhook **subscriptions are not activated** by this codebase (no TOML/Partner deploy in M1).
+
 ## Known gaps and production requirements
 
 | Topic | Current state | Production expectation |
 |-------|---------------|------------------------|
 | Email verification | Implemented links; **no** `verified` middleware on API | Enforce before sensitive actions if required |
 | Invitation accept | Email sent; **no** accept API | Implement accept + membership write |
-| Token refresh | `ShopifyCredentialService` unused by app paths | Wire refresh before calling Shopify Admin APIs |
+| Token refresh | `ShopifyCredentialService` used by webhook registration and credential paths | Keep refresh in front of all Admin API calls |
 | Session fixation across devices | Sanctum `AuthenticateSession` not applied on API | Consider enabling for password changes |
 | Marketer PII export | Marketers can export contacts | Confirm product policy / add finer roles |
+| Shopify privacy compliance | M1 intake/processing/lease recovery/Admin APIs implemented; subscriptions not activated | Activate only after staging gate + legal/ops blockers cleared |
+| Compliance ops visibility | Artisan report + recover schedule; not paging | Wire external alerts on aged statuses if SLA requires |
 | Secrets | `.env` gitignored; `.env.example` only | Rotate keys; never commit secrets |
-| Ops | Queue worker + scheduler required | Supervisord/systemd + cron `schedule:run` |
+| Ops | Queue worker + scheduler required (includes compliance recover every 5m) | Supervisord/systemd + cron `schedule:run` |
 | Transport | Local HTTP cookies OK for dev | TLS everywhere in production |
+| Backups | Not documented in-repo | Define backup erase/expiry for privacy requests |
 
 ## Related docs
 
+- [PRIVACY-DATA-INVENTORY.md](PRIVACY-DATA-INVENTORY.md)
+- [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md)
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [APPLICATION-FLOWS.md](APPLICATION-FLOWS.md)
 - [ROADMAP-AND-GAPS.md](ROADMAP-AND-GAPS.md)

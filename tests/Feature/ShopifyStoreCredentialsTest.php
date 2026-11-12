@@ -63,6 +63,13 @@ class ShopifyStoreCredentialsTest extends TestCase
 
         $this->assertSame('hidden-tokens.myshopify.com', $payload['shopify_shop_domain']);
         $this->assertSame([], $payload['shopify_scopes']);
+        $this->assertTrue($payload['requires_shopify_reauth']);
+        $this->assertEqualsCanonicalizing([
+            'read_customers',
+            'read_products',
+            'read_orders',
+            'read_all_orders',
+        ], $payload['missing_shopify_scopes']);
         $this->assertArrayNotHasKey('shopify_access_token', $payload);
         $this->assertArrayNotHasKey('shopify_refresh_token', $payload);
         $this->assertStringNotContainsString('shpat_test_access_token', $response->getContent());

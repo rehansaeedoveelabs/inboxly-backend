@@ -16,18 +16,23 @@ class ShopifyConfigTest extends TestCase
         );
     }
 
-    public function test_shopify_scopes_default_to_an_empty_list(): void
+    public function test_shopify_scopes_default_to_commerce_baseline(): void
     {
+        $required = config('services.shopify.required_scopes');
         $scopes = config('services.shopify.scopes');
 
+        $this->assertIsArray($required);
         $this->assertIsArray($scopes);
-        $this->assertSame([], $scopes);
-        $this->assertEmpty(array_intersect($scopes, [
+        $this->assertSame([
             'read_customers',
-            'write_customers',
-            'read_orders',
-            'write_orders',
             'read_products',
+            'read_orders',
+            'read_all_orders',
+        ], $required);
+        $this->assertSame($required, $scopes);
+        $this->assertEmpty(array_intersect($scopes, [
+            'write_customers',
+            'write_orders',
             'write_products',
         ]));
     }

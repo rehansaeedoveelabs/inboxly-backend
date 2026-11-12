@@ -2,6 +2,7 @@
 
 namespace App\Actions\Shopify;
 
+use App\Enums\ShopifyComplianceTopic;
 use App\Enums\StoreConnectionStatus;
 use App\Models\ShopifyWebhookDelivery;
 use App\Models\Store;
@@ -14,6 +15,10 @@ use InvalidArgumentException;
 
 class HandleShopifyWebhook
 {
+    public function __construct(
+        private readonly AcceptShopifyComplianceWebhook $acceptCompliance,
+    ) {}
+
     /**
      * @param  array<string, string|null>  $headers
      * @return array{status: int, duplicate?: bool}
@@ -27,6 +32,15 @@ class HandleShopifyWebhook
             Log::notice('Rejected Shopify webhook with invalid HMAC.');
 
             return ['status' => 401];
+        }
+
+        // Shopify HTTPS deliveries use Content-Type: application/json (optional charset).
+        // Missing Content-Type is allowed so HMAC-valid deliveries are not dropped by proxies.
+        $contentType = $headers['content-type'] ?? null;
+        if (is_string($contentType) && $contentType !== '' && ! $this->isJsonContentType($contentType)) {
+            Log::notice('Rejected Shopify webhook with non-JSON Content-Type.');
+
+            return ['status' => 400];
         }
 
         $topic = $headers['x-shopify-topic'] ?? null;
@@ -60,6 +74,17 @@ class HandleShopifyWebhook
             ->where('shopify_shop_domain', $shopDomain)
             ->first();
 
+        if (ShopifyComplianceTopic::tryFrom($topic) !== null) {
+            return $this->acceptCompliance->handle(
+                $rawBody,
+                $topic,
+                $shopDomain,
+                $webhookId,
+                $payload,
+                $store,
+            );
+        }
+
         if (! $this->claimDelivery($webhookId, $topic, $shopDomain, $store?->getKey())) {
             return ['status' => 200, 'duplicate' => true];
         }
@@ -73,11 +98,19 @@ class HandleShopifyWebhook
             ]),
         };
 
+        // Delivery acceptance only — not privacy-processing completion.
         ShopifyWebhookDelivery::query()
             ->where('webhook_id', $webhookId)
             ->update(['processed_at' => now()]);
 
         return ['status' => 200];
+    }
+
+    private function isJsonContentType(string $contentType): bool
+    {
+        $mediaType = strtolower(trim(explode(';', $contentType, 2)[0]));
+
+        return $mediaType === 'application/json';
     }
 
     private function claimDelivery(string $webhookId, string $topic, string $shopDomain, ?string $storeId): bool
@@ -92,7 +125,6 @@ class HandleShopifyWebhook
 
             return true;
         } catch (QueryException $e) {
-            // Unique constraint on webhook_id — concurrent/retry duplicate.
             if ($this->isUniqueViolation($e)) {
                 return false;
             }
@@ -106,7 +138,6 @@ class HandleShopifyWebhook
         $sqlState = (string) ($e->errorInfo[0] ?? '');
         $driverCode = (int) ($e->errorInfo[1] ?? 0);
 
-        // SQLSTATE 23000 + MySQL 1062 duplicate key.
         return $sqlState === '23000' || $driverCode === 1062 || str_contains(mb_strtolower($e->getMessage()), 'unique');
     }
 
@@ -127,7 +158,6 @@ class HandleShopifyWebhook
                 return;
             }
 
-            // Already cleared — repeated uninstall deliveries are harmless.
             if ($locked->shopify_access_token === null
                 && $locked->shopify_refresh_token === null
                 && in_array($locked->connection_status, [
@@ -143,8 +173,6 @@ class HandleShopifyWebhook
                 'shopify_access_token_expires_at' => null,
                 'shopify_refresh_token_expires_at' => null,
                 'shopify_scopes' => [],
-                // Preserve shop identity on the Inboxly store for reconnection UX;
-                // global uniqueness remains on shopify_shop_domain until soft-delete.
                 'connection_status' => $locked->is_demo
                     ? StoreConnectionStatus::Demo
                     : StoreConnectionStatus::Disconnected,

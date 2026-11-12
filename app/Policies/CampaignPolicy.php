@@ -51,6 +51,15 @@ class CampaignPolicy
         return $this->canManage($user, $campaign);
     }
 
+    /**
+     * Facebook Page publishing is separate from email send, but uses the same
+     * audience management authorization (workspace members).
+     */
+    public function publishMeta(User $user, Campaign $campaign): bool
+    {
+        return $this->canManage($user, $campaign);
+    }
+
     private function canManage(User $user, Campaign $campaign): bool
     {
         $store = $campaign->store;

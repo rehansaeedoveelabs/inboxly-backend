@@ -8,6 +8,10 @@ use App\Support\Messaging\Contracts\SmsSender;
 use App\Support\Messaging\DisabledSmsSender;
 use App\Support\Messaging\FakeEmailSender;
 use App\Support\Messaging\FakeSmsSender;
+use App\Support\Meta\Contracts\MetaProvider;
+use App\Support\Meta\FakeMetaProvider;
+use App\Support\Meta\GraphMetaProvider;
+use App\Support\Shopify\ShopifyComplianceRuntimeGuard;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -35,11 +39,23 @@ class AppServiceProvider extends ServiceProvider
                 default => $this->app->make(DisabledSmsSender::class),
             };
         });
+
+        $this->app->singleton(MetaProvider::class, function () {
+            $driver = (string) config('services.meta.driver', 'fake');
+
+            return match ($driver) {
+                'meta' => $this->app->make(GraphMetaProvider::class),
+                default => $this->app->make(FakeMetaProvider::class),
+            };
+        });
     }
 
     public function boot(): void
     {
         Password::defaults(fn () => Password::min(8));
+
+        // M1 compliance: warn on unsafe lease/queue/pcntl posture (does not read worker CLI flags).
+        ShopifyComplianceRuntimeGuard::evaluate(log: true);
 
         // Login / register: per email + IP so one user cannot lock out another IP.
         RateLimiter::for('auth', function (Request $request) {
@@ -71,6 +87,12 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('brevo-webhooks', function (Request $request) {
             return Limit::perMinute(120)->by('brevo-webhooks|'.$request->ip());
+        });
+
+        RateLimiter::for('meta-oauth', function (Request $request) {
+            $key = $request->user()?->getAuthIdentifier() ?? $request->ip();
+
+            return Limit::perMinute(10)->by('meta-oauth|'.$key);
         });
     }
 }

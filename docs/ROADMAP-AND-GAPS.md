@@ -27,9 +27,9 @@ Honest inventory of what this backend implements versus what is incomplete or on
 | Store update/delete HTTP | Soft-delete hooks exist; no public update/destroy routes |
 | Workspace delete | Soft deletes on model; no destroy route |
 | Email verification enforcement | `MustVerifyEmail` present; routes lack `verified` middleware |
-| Shopify token refresh wiring | `ShopifyCredentialService` exists; unused by controllers/jobs |
-| Webhook job vs refresh | Registration job uses stored access token directly |
-| Import file upload | Inline JSON rows only (≤1000); PII held in `options.rows` until success |
+| Shopify token refresh wiring | `ShopifyCredentialService` refreshes for webhook registration and credential helpers; all future Admin customer APIs must use it |
+| Shopify privacy compliance | M1 handlers/Admin APIs/lease recovery/ops report in code; Partner/TOML subscription + staging activation **not** done; external alerting still required; see [PRIVACY-DATA-INVENTORY.md](PRIVACY-DATA-INVENTORY.md) and [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md) |
+| Import file upload | Inline JSON rows only (≤1000); PII held in `options.rows` until success (cleared on success; retained on failure) |
 | Import list/cancel | Show-by-id only |
 | Export ↔ segments | Exports filter like contact list; cannot target a segment id |
 | Consent event read API | Events written; no list endpoint |
@@ -52,24 +52,30 @@ Campaigns, automation, forms, analytics/live, image library, brand assets, chann
 
 ## Planned / not present in backend code
 
-- Campaigns, templates, journeys, email/SMS/push sending
-- Shopify customer/order/product sync
+- Shopify customer identity store, conflict/link workflows, and customer sync (initial + Customer Events)
+- Staging/production activation of Shopify compliance webhook subscriptions (M1 code exists; activation gated)
 - Non-Shopify store platforms (`StorePlatform` is Shopify-only)
 - Required Redis/Horizon
 - Required S3/R2 for exports (disk config exists; export job hardcodes `local`)
 
+Campaign send, templates, and Meta publishing exist in code beyond earlier stubs; treat remaining “mock-only” claims as frontend-specific where noted above.
+
 ## Production-readiness gaps
 
-1. Run **queue workers** and **scheduler** in every non-sync environment.
-2. Wire **Shopify credential refresh** before relying on long-lived Admin API calls.
+1. Run **queue workers** and **scheduler** in every non-local environment (scheduler includes M1 compliance recover every 5 minutes).
+2. Keep **Shopify credential refresh** in front of every Admin API call (including future customer sync).
 3. Finish **invitation accept** before treating multi-user workspaces as complete.
 4. Decide and enforce **email verification** policy.
 5. Configure HTTPS session cookies, real CORS/Sanctum domains, SMTP, monitoring.
-6. Treat marketing modules as **unbuilt** until APIs and real UI exist.
+6. Complete **privacy/compliance** readiness (inventory is M0; handlers are M1+) before production Shopify customer-data synchronization.
 7. Keep frontend export UI in sync with the export API before advertising CSV export to end users.
+8. Document **backup erase/expiry** for privacy requests (not in-repo today).
 
 ## Related docs
 
+- [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md)
+
+- [PRIVACY-DATA-INVENTORY.md](PRIVACY-DATA-INVENTORY.md)
 - [ARCHITECTURE.md](ARCHITECTURE.md)
 - [SECURITY.md](SECURITY.md)
 - Frontend: `docs/ROADMAP-AND-GAPS.md` in [inboxly-frontend](https://github.com/rehansaeedoveelabs/inboxly-frontend)

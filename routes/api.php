@@ -14,7 +14,12 @@ use App\Http\Controllers\Api\V1\ContactExportController;
 use App\Http\Controllers\Api\V1\ContactImportController;
 use App\Http\Controllers\Api\V1\ContactTagController;
 use App\Http\Controllers\Api\V1\EmailTemplateController;
+use App\Http\Controllers\Api\V1\Meta\CampaignMetaPublicationController;
+use App\Http\Controllers\Api\V1\Meta\MetaConnectionController;
+use App\Http\Controllers\Api\V1\Meta\MetaOAuthController;
+use App\Http\Controllers\Api\V1\Meta\MetaPageController;
 use App\Http\Controllers\Api\V1\SegmentController;
+use App\Http\Controllers\Api\V1\Shopify\ShopifyComplianceRequestController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyConnectionController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyOAuthController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyWebhookController;
@@ -66,6 +71,14 @@ Route::get('shopify/oauth/callback', [ShopifyOAuthController::class, 'callback']
     ->name('shopify.oauth.callback');
 
 /*
+| Meta OAuth callback — public (Meta redirects the merchant browser here).
+| Full path: /api/v1/meta/oauth/callback
+*/
+Route::get('meta/oauth/callback', [MetaOAuthController::class, 'callback'])
+    ->middleware('throttle:meta-oauth')
+    ->name('meta.oauth.callback');
+
+/*
 | Shopify webhooks — public (verified via X-Shopify-Hmac-Sha256).
 | Full path: /api/v1/shopify/webhooks
 */
@@ -102,6 +115,33 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('stores/{store}/shopify/connection', [ShopifyConnectionController::class, 'destroy'])
         ->middleware('throttle:10,1')
         ->name('shopify.connection.destroy');
+
+    Route::get('stores/{store}/shopify/compliance-requests', [ShopifyComplianceRequestController::class, 'index'])
+        ->name('shopify.compliance-requests.index');
+    Route::get('stores/{store}/shopify/compliance-requests/{complianceRequest}', [ShopifyComplianceRequestController::class, 'show'])
+        ->name('shopify.compliance-requests.show');
+    Route::post('stores/{store}/shopify/compliance-requests/{complianceRequest}/retry', [ShopifyComplianceRequestController::class, 'retry'])
+        ->middleware('throttle:10,1')
+        ->name('shopify.compliance-requests.retry');
+
+    Route::get('stores/{store}/meta/oauth/start', [MetaOAuthController::class, 'start'])
+        ->middleware('throttle:meta-oauth')
+        ->name('meta.oauth.start');
+    Route::get('stores/{store}/meta/connection', [MetaConnectionController::class, 'show'])
+        ->name('meta.connection.show');
+    Route::delete('stores/{store}/meta/connection', [MetaConnectionController::class, 'destroy'])
+        ->middleware('throttle:meta-oauth')
+        ->name('meta.connection.destroy');
+    Route::get('stores/{store}/meta/pages/discover', [MetaPageController::class, 'discover'])
+        ->middleware('throttle:60,1')
+        ->name('meta.pages.discover');
+    Route::post('stores/{store}/meta/pages/select', [MetaPageController::class, 'select'])
+        ->middleware('throttle:30,1')
+        ->name('meta.pages.select');
+    Route::put('stores/{store}/meta/pages/{page}/default', [MetaPageController::class, 'setDefault'])
+        ->name('meta.pages.default');
+    Route::delete('stores/{store}/meta/pages/{page}', [MetaPageController::class, 'destroy'])
+        ->name('meta.pages.destroy');
 
     // Audience (Phase 2). Every handler authorises against the owning store's workspace.
     Route::get('stores/{store}/contacts', [ContactController::class, 'index']);
@@ -152,6 +192,25 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:campaign-send');
     Route::post('campaigns/{campaign}/test-send', [CampaignController::class, 'testSend'])
         ->middleware('throttle:campaign-test-send');
+
+    Route::get('campaigns/{campaign}/meta/eligible-pages', [CampaignMetaPublicationController::class, 'eligiblePages'])
+        ->name('campaigns.meta.eligible-pages');
+    Route::put('campaigns/{campaign}/meta/social-content', [CampaignMetaPublicationController::class, 'updateSocialContent'])
+        ->name('campaigns.meta.social-content');
+    Route::get('campaigns/{campaign}/meta/publications', [CampaignMetaPublicationController::class, 'index'])
+        ->name('campaigns.meta.publications.index');
+    Route::post('campaigns/{campaign}/meta/publications', [CampaignMetaPublicationController::class, 'store'])
+        ->middleware('throttle:30,1')
+        ->name('campaigns.meta.publications.store');
+    Route::post('campaigns/{campaign}/meta/publications/{publication}/retry', [CampaignMetaPublicationController::class, 'retry'])
+        ->middleware('throttle:30,1')
+        ->name('campaigns.meta.publications.retry');
+    Route::post('campaigns/{campaign}/meta/publications/{publication}/reconcile', [CampaignMetaPublicationController::class, 'reconcile'])
+        ->middleware('throttle:30,1')
+        ->name('campaigns.meta.publications.reconcile');
+    Route::post('campaigns/{campaign}/meta/publications/{publication}/resolve', [CampaignMetaPublicationController::class, 'resolve'])
+        ->middleware('throttle:30,1')
+        ->name('campaigns.meta.publications.resolve');
 
     Route::get('stores/{store}/assets', [AssetController::class, 'index']);
     Route::post('stores/{store}/assets', [AssetController::class, 'store']);

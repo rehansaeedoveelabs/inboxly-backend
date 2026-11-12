@@ -283,7 +283,7 @@ class ShopifyOAuthClient
         if (is_array($errors) && $errors !== []) {
             if ($this->errorsIndicateMissingScope($errors)) {
                 throw new ShopifyOAuthException(
-                    'Shopify identity verification requires a permission that is not in the configured empty scope list. Do not add customer, order, or product scopes silently.',
+                    'Shopify identity verification was denied by the current access scopes.',
                     'identity_permission_required',
                 );
             }
@@ -313,6 +313,148 @@ class ShopifyOAuthClient
             'currency_code' => isset($shop['currencyCode']) ? (string) $shop['currencyCode'] : null,
             'timezone' => isset($shop['ianaTimezone']) ? (string) $shop['ianaTimezone'] : null,
         ];
+    }
+
+    /**
+     * Live granted scopes for the current app installation.
+     *
+     * Official: currentAppInstallation.accessScopes.handle
+     * https://shopify.dev/docs/api/admin-graphql/latest/queries/currentAppInstallation
+     *
+     * @return list<string>
+     *
+     * @throws ShopifyCredentialException
+     */
+    public function fetchGrantedAccessScopes(string $shopDomain, string $accessToken): array
+    {
+        $version = (string) config('services.shopify.api_version', '2026-10');
+        $url = "https://{$shopDomain}/admin/api/{$version}/graphql.json";
+
+        $query = <<<'GRAPHQL'
+        query CurrentAppAccessScopes {
+          currentAppInstallation {
+            accessScopes {
+              handle
+            }
+          }
+        }
+        GRAPHQL;
+
+        try {
+            $response = Http::withHeaders([
+                'X-Shopify-Access-Token' => $accessToken,
+                'Content-Type' => 'application/json',
+            ])->timeout(15)->post($url, ['query' => $query]);
+        } catch (ConnectionException $e) {
+            Log::warning('Shopify accessScopes connection failed.', [
+                'shop_domain' => $shopDomain,
+            ]);
+
+            throw new ShopifyCredentialException(
+                'Unable to reach Shopify to verify access scopes.',
+                'access_scopes_network',
+                permanent: false,
+                previous: $e,
+            );
+        }
+
+        if ($response->status() === 401 || $response->status() === 403) {
+            Log::warning('Shopify accessScopes authorization failed.', [
+                'shop_domain' => $shopDomain,
+                'status' => $response->status(),
+            ]);
+
+            throw new ShopifyCredentialException(
+                'Shopify denied access scope inspection.',
+                'access_scopes_unauthorized',
+                permanent: true,
+            );
+        }
+
+        if ($response->serverError() || $response->status() === 429) {
+            Log::warning('Shopify accessScopes temporarily failed.', [
+                'shop_domain' => $shopDomain,
+                'status' => $response->status(),
+            ]);
+
+            throw new ShopifyCredentialException(
+                'Shopify temporarily rejected access scope inspection.',
+                'access_scopes_transient',
+                permanent: false,
+            );
+        }
+
+        if (! $response->successful()) {
+            Log::warning('Shopify accessScopes HTTP failure.', [
+                'shop_domain' => $shopDomain,
+                'status' => $response->status(),
+            ]);
+
+            throw new ShopifyCredentialException(
+                'Shopify access scope inspection failed.',
+                'access_scopes_http_failed',
+                permanent: $response->clientError(),
+            );
+        }
+
+        $payload = $response->json();
+        if (! is_array($payload)) {
+            throw new ShopifyCredentialException(
+                'Shopify returned an invalid accessScopes response.',
+                'access_scopes_malformed',
+                permanent: false,
+            );
+        }
+
+        $errors = $payload['errors'] ?? null;
+        if (is_array($errors) && $errors !== []) {
+            // GraphQL may return ACCESS_DENIED with HTTP 200.
+            if ($this->errorsIndicateMissingScope($errors)) {
+                Log::warning('Shopify accessScopes GraphQL permission denied.', [
+                    'shop_domain' => $shopDomain,
+                ]);
+
+                throw new ShopifyCredentialException(
+                    'Shopify denied the accessScopes query for this installation.',
+                    'access_scopes_denied',
+                    permanent: true,
+                );
+            }
+
+            Log::warning('Shopify accessScopes GraphQL returned errors.', [
+                'shop_domain' => $shopDomain,
+            ]);
+
+            throw new ShopifyCredentialException(
+                'Shopify access scope inspection failed.',
+                'access_scopes_graphql_failed',
+                permanent: false,
+            );
+        }
+
+        $scopes = data_get($payload, 'data.currentAppInstallation.accessScopes', []);
+        if (! is_array($scopes)) {
+            throw new ShopifyCredentialException(
+                'Shopify accessScopes response was incomplete.',
+                'access_scopes_incomplete',
+                permanent: false,
+            );
+        }
+
+        $handles = [];
+        foreach ($scopes as $scope) {
+            if (! is_array($scope)) {
+                continue;
+            }
+            $handle = isset($scope['handle']) && is_string($scope['handle'])
+                ? trim($scope['handle'])
+                : '';
+            if ($handle !== '') {
+                $handles[] = $handle;
+            }
+        }
+
+        return array_values(array_unique($handles));
     }
 
     /**

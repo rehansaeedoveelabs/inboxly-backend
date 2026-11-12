@@ -19,6 +19,7 @@ class ShopifyWebhookController extends Controller
             'x-shopify-webhook-id',
             'x-shopify-api-version',
             'x-shopify-event-id',
+            'content-type',
         ] as $header) {
             $value = $request->header($header);
             $headers[$header] = is_string($value) ? $value : null;
