@@ -22,6 +22,7 @@ class UpdateCampaignRequest extends FormRequest
             'subject' => ['sometimes', 'nullable', 'string', 'max:255'],
             'preview_text' => ['sometimes', 'nullable', 'string', 'max:255'],
             'body' => ['sometimes', 'nullable', 'string', 'max:100000'],
+            'content_document' => ['sometimes', 'nullable', 'array'],
             'audience_type' => ['sometimes', 'required', Rule::enum(CampaignAudienceType::class)],
             'segment_id' => [
                 'nullable',
