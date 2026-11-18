@@ -121,9 +121,11 @@ Flow summary:
 
 **Phase 11A.2 / M1:** Compliance webhook foundation — durable `shopify_compliance_requests` + append-only events; intake for `customers/data_request`, `customers/redact`, `shop/redact` via existing `/api/v1/shopify/webhooks` (HMAC + delivery dedupe); queued `ProcessShopifyComplianceRequestJob` with processing lease + atomic reclaim; Admin list/show/retry APIs; scheduled `shopify:recover-compliance-requests`; ops report command. Delivery acceptance ≠ privacy completion. See [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md).
 
-**Phase 11A.2 / M2:** Shopify customer identity + conflict **schema only** — `shopify_customer_identities` (store-scoped GID, optional contact link) and `shopify_identity_conflicts`. Contact soft-delete unlinks identities without touching consent. No Shopify customer fetch, sync, Admin link UI, matching/merging, or webhook changes in this milestone. See [DATABASE.md](DATABASE.md).
+**Phase 11A.2 / M2:** Shopify customer identity + conflict **schema** — `shopify_customer_identities` (store-scoped GID, optional contact link) and `shopify_identity_conflicts`. Contact soft-delete unlinks identities without touching consent. See [DATABASE.md](DATABASE.md).
 
-**Not implemented:** Shopify customer/order/product sync; conflict/link Admin workflows; Partner/TOML compliance subscription activation; external backup erasure. Production customer-data synchronization remains gated on privacy/compliance readiness beyond schema.
+**Phase 11A.3 / commerce sync thin slice:** Admin GraphQL backfill via `ShopifyAdminGraphqlClient` + `RunShopifyCommerceSyncJob`. Customers upsert **GIDs only** into `shopify_customer_identities` (no Contact upsert, no email/phone). Products → `shopify_products`; orders → `shopify_orders` (customer GID only, no address/email). Runs tracked in `shopify_sync_runs`. HTTP: `POST/GET /api/v1/stores/{store}/shopify/sync`; `StoreResource.shopify_sync` summary. **Not in this slice:** commerce webhooks, Contact materialization, Admin link/conflict UI.
+
+**Not implemented:** commerce create/update/delete webhooks; Contact upsert from Shopify; conflict/link Admin workflows; Partner/TOML compliance subscription activation; external backup erasure. Production Contact PII sync remains gated on privacy/compliance readiness.
 
 ## Queue and schedule architecture
 

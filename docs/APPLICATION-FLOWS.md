@@ -66,7 +66,9 @@ Admin DELETE connection → best-effort remote revoke → clear local credential
 4. `app/uninstalled` → clear credentials / disconnected; `app/scopes_update` → update scopes.
 5. Compliance topics (`customers/data_request`, `customers/redact`, `shop/redact`) → durable `shopify_compliance_requests` + leased `ProcessShopifyComplianceRequestJob`. Delivery `processed_at` ≠ privacy completion. Ops: [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md).
 
-**Phase 11A.0:** `RegisterShopifyWebhooksJob` obtains tokens via `ShopifyCredentialService::ensureValidAccessToken`. Store API exposes `missing_shopify_scopes` / `requires_shopify_reauth` from granted scopes (never assumes requested scopes were approved). Customer/product/order sync still not implemented.
+**Phase 11A.0:** `RegisterShopifyWebhooksJob` obtains tokens via `ShopifyCredentialService::ensureValidAccessToken`. Store API exposes `missing_shopify_scopes` / `requires_shopify_reauth` from granted scopes (never assumes requested scopes were approved).
+
+**Phase 11A.3 commerce sync:** `POST /stores/{store}/shopify/sync` starts a queued Admin GraphQL backfill (customers GID-only, products, orders). `GET .../shopify/sync` returns latest run + durable counts. Commerce webhooks and Contact materialization are still not implemented.
 
 ## 5. Contact management
 

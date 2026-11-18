@@ -17,8 +17,9 @@ Honest inventory of what this backend implements versus what is incomplete or on
 | Imports | Queued JSON-row import job |
 | Exports | Queued CSV, atomic claims, download, prune command |
 | Automated tests | Broad Feature/Unit coverage under `tests/` |
-| Campaigns (email) | Draft/schedule/send/test-send pipeline; Meta publish support; SMS channel rejected until a provider ships |
+| Campaigns (email) | Draft/schedule/send/test-send pipeline; Meta publish support; SMS via `fake` or Vonage |
 | Welcome Automation | `contact.email_subscribed` trigger, linear delay + send_email steps, enrollments/runs, activate/pause/archive, `automations:dispatch-due` scheduler; local sends use the **fake** email driver |
+| Shopify commerce sync (thin slice) | Admin GraphQL backfill: customer GIDs → `shopify_customer_identities`; products/orders tables; `shopify_sync_runs` + `POST/GET .../shopify/sync` |
 
 ## Incomplete (backend)
 
@@ -35,7 +36,7 @@ Honest inventory of what this backend implements versus what is incomplete or on
 | Import list/cancel | Show-by-id only |
 | Export ↔ segments | Exports filter like contact list; cannot target a segment id |
 | Consent event read API | Events written; no list endpoint |
-| SMS campaign sending | Channel can be drafted; `StartCampaignSend` rejects SMS until a provider ships |
+| SMS campaign sending | Fake + Vonage drivers shipped; real sends need `MESSAGING_SMS_DRIVER=vonage` + `VONAGE_SMS_SENDING_ENABLED=true` |
 | Personal access tokens | Migration present; SPA unused |
 
 ## Frontend integration gaps (companion repo)
@@ -58,13 +59,13 @@ Forms, analytics/live, image library, brand assets, channel settings, and most o
 
 - Visual automation canvas / graph editor — **still deferred**
 - Simple linear condition branch (`condition` step) + `contact.tag_added` trigger — **shipped** (thin slice; not a canvas)
-- SMS campaign send via `MESSAGING_SMS_DRIVER=fake` — **shipped** locally; real SMS provider still deferred
+- SMS campaign send via `MESSAGING_SMS_DRIVER=fake` — **shipped** locally; real Vonage via `MESSAGING_SMS_DRIVER=vonage` + `VONAGE_SMS_SENDING_ENABLED=true`
 - Live store insights overview (`GET .../insights/overview`) + dashboard wiring — **shipped** (no revenue analytics yet)
 - Real Brevo delivery — available via env (`MESSAGING_EMAIL_DRIVER=brevo` + `BREVO_SENDING_ENABLED=true`); defaults remain fake
 
 ## Planned / not present in backend code
 
-- Shopify customer identity **schema** exists (M2: `shopify_customer_identities` + `shopify_identity_conflicts`); conflict/link Admin workflows and customer sync (initial + Customer Events) remain unimplemented
+- Shopify customer identity schema (M2) + GID-only commerce sync backfill (11A.3) exist; conflict/link Admin workflows, Contact materialization, and Customer Events / commerce webhooks remain unimplemented
 - Staging/production activation of Shopify compliance webhook subscriptions (M1 code exists; activation gated)
 - Non-Shopify store platforms (`StorePlatform` is Shopify-only)
 - Required Redis/Horizon

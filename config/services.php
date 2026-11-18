@@ -83,8 +83,8 @@ return [
     | Vonage (Nexmo) SMS
     |--------------------------------------------------------------------------
     |
-    | Paste credentials in .env for local testing. Sender wiring is separate;
-    | keep VONAGE_SMS_SENDING_ENABLED=false until the SMS driver is implemented.
+    | Paste credentials in .env for local testing. Real sends require
+    | MESSAGING_SMS_DRIVER=vonage and VONAGE_SMS_SENDING_ENABLED=true.
     |
     */
     'vonage' => [
@@ -93,6 +93,7 @@ return [
         'from' => env('VONAGE_FROM'),
         'sending_enabled' => (bool) env('VONAGE_SMS_SENDING_ENABLED', false),
         'timeout_seconds' => (int) env('VONAGE_TIMEOUT_SECONDS', 20),
+        'base_url' => env('VONAGE_BASE_URL', 'https://rest.nexmo.com'),
     ],
 
     /*
@@ -158,6 +159,11 @@ return [
         'compliance_recover_limit' => (int) env('SHOPIFY_COMPLIANCE_RECOVER_LIMIT', 50),
         // Ops report: age threshold for "old received" (inspection only — not alerting).
         'compliance_ops_received_older_than_seconds' => (int) env('SHOPIFY_COMPLIANCE_OPS_RECEIVED_OLDER_THAN', 3600),
+        // Commerce sync (customers GID / products / orders) Admin GraphQL.
+        'graphql_timeout_seconds' => (int) env('SHOPIFY_GRAPHQL_TIMEOUT_SECONDS', 20),
+        'sync_page_size' => (int) env('SHOPIFY_SYNC_PAGE_SIZE', 50),
+        'sync_max_pages_per_attempt' => (int) env('SHOPIFY_SYNC_MAX_PAGES_PER_ATTEMPT', 5),
+        'sync_lease_seconds' => (int) env('SHOPIFY_SYNC_LEASE_SECONDS', 180),
     ],
 
     /*

@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\Meta\MetaConnectionController;
 use App\Http\Controllers\Api\V1\Meta\MetaOAuthController;
 use App\Http\Controllers\Api\V1\Meta\MetaPageController;
 use App\Http\Controllers\Api\V1\SegmentController;
+use App\Http\Controllers\Api\V1\Shopify\ShopifyCommerceSyncController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyComplianceRequestController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyConnectionController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyOAuthController;
@@ -125,6 +126,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('stores/{store}/shopify/compliance-requests/{complianceRequest}/retry', [ShopifyComplianceRequestController::class, 'retry'])
         ->middleware('throttle:10,1')
         ->name('shopify.compliance-requests.retry');
+
+    Route::get('stores/{store}/shopify/sync', [ShopifyCommerceSyncController::class, 'show'])
+        ->name('shopify.sync.show');
+    Route::post('stores/{store}/shopify/sync', [ShopifyCommerceSyncController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('shopify.sync.store');
 
     Route::get('stores/{store}/meta/oauth/start', [MetaOAuthController::class, 'start'])
         ->middleware('throttle:meta-oauth')

@@ -12,8 +12,8 @@ class DisabledSmsSender implements SmsSender
     public function send(array $payload): SendResult
     {
         return SendResult::fail(
-            'sms_provider_deferred',
-            'SMS sending is not enabled yet. Email delivery via Brevo is available in Phase 9.',
+            'sms_provider_disabled',
+            'SMS sending is disabled. Set MESSAGING_SMS_DRIVER=fake or vonage to enable.',
             retryable: false,
         );
     }

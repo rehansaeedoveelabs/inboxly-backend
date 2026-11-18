@@ -63,6 +63,22 @@ class StorePolicy
     }
 
     /**
+     * Viewing Shopify commerce sync status — any workspace member.
+     */
+    public function viewShopifyCommerceSync(User $user, Store $store): bool
+    {
+        return $this->view($user, $store);
+    }
+
+    /**
+     * Starting Shopify commerce sync — any workspace member (marketing/ops).
+     */
+    public function syncShopifyCommerce(User $user, Store $store): bool
+    {
+        return $this->manageAudience($user, $store);
+    }
+
+    /**
      * Connecting Meta changes platform credentials — Admin only.
      */
     public function connectMeta(User $user, Store $store): bool

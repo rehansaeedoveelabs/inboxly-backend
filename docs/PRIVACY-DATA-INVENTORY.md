@@ -276,12 +276,14 @@ Documentation-only milestone. This inventory is grounded in the current `inboxly
 | Hard-delete store | Cascades identities and conflicts |
 | Status | **Verified** schema present (M2) — sync/Customer Events / Admin link still **absent** |
 
-### 1.21 Planned Shopify sync runtime (not present)
+### 1.21 Shopify sync runtime (thin slice present; PII Contact sync deferred)
 
 | Item | Detail |
 |------|--------|
-| Finding | No sync runs table, Customer Events handlers, or Admin linking/matching workflows |
-| Status | **Verified absent** — required before durable Shopify customer PII sync (later milestones) |
+| Location | `shopify_sync_runs`, `shopify_products`, `shopify_orders`; customer path upserts GIDs into `shopify_customer_identities` only |
+| Personal data | Customer sync stores **GID + timestamps** only — **no** email/phone/name snapshots and **no** `contacts` upsert. Orders store optional `shopify_customer_gid` + commercial fields; **no** shipping/billing address or customer email/phone |
+| Absent | Customer Events handlers; commerce create/update/delete webhooks; Admin linking/matching workflows; durable Shopify → Contact PII materialization |
+| Status | **Verified** thin-slice backfill present — production Contact PII sync still gated on compliance activation + legal decisions |
 
 ---
 
