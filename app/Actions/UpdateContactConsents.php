@@ -4,6 +4,7 @@ namespace App\Actions;
 
 use App\Enums\ConsentChannel;
 use App\Enums\ConsentStatus;
+use App\Events\ContactEmailSubscribed;
 use App\Models\Contact;
 use Illuminate\Support\Facades\DB;
 
@@ -12,6 +13,9 @@ class UpdateContactConsents
     /**
      * Sets the current consent per channel and appends an immutable consent_events row
      * for every real change (new row, or status differs). Re-sending the same status is a no-op.
+     *
+     * Dispatches ContactEmailSubscribed (after outermost commit) when email consent
+     * newly becomes subscribed. Unchanged consent does not dispatch.
      *
      * @param  list<array{channel: string, status: string, source?: ?string}>  $consents
      */
@@ -53,6 +57,17 @@ class UpdateContactConsents
                     'status' => $status,
                     'source' => $source,
                 ]);
+
+                if (
+                    $channel === ConsentChannel::Email
+                    && $status === ConsentStatus::Subscribed
+                ) {
+                    // Deferred until outermost commit (ShouldDispatchAfterCommit).
+                    ContactEmailSubscribed::dispatch(
+                        $contact->getKey(),
+                        (string) $contact->store_id,
+                    );
+                }
             }
         });
 

@@ -12,6 +12,7 @@ users
         └── workspaces
               └── stores
                     ├── contacts → consents / consent_events / tags
+                    ├── shopify_customer_identities → shopify_identity_conflicts
                     ├── tags
                     ├── segments
                     ├── contact_imports
@@ -39,6 +40,8 @@ Per-user store selection: `user_workspace_contexts (user_id, workspace_id) → a
 | `contact_exports` | Export jobs + file metadata | No |
 | `shopify_oauth_states` | One-time OAuth CSRF/state | No |
 | `shopify_webhook_deliveries` | Webhook idempotency | No |
+| `shopify_customer_identities` | Store-scoped Shopify Customer GID; optional contact link | No |
+| `shopify_identity_conflicts` | Explicit Admin-resolution identity conflicts | No |
 | `sessions`, `jobs`, `failed_jobs`, `cache`, … | Framework | — |
 
 ## Relationships (ER)
@@ -52,6 +55,7 @@ erDiagram
   users ||--o{ user_workspace_contexts : has
   stores ||--o| user_workspace_contexts : active
   stores ||--o{ contacts : has
+  stores ||--o{ shopify_customer_identities : has
   stores ||--o{ tags : has
   stores ||--o{ segments : has
   stores ||--o{ contact_imports : has
@@ -59,6 +63,8 @@ erDiagram
   contacts ||--o{ contact_consents : has
   contacts ||--o{ consent_events : has
   contacts }o--o{ tags : contact_tag
+  contacts |o--o{ shopify_customer_identities : optional_link
+  shopify_customer_identities ||--o{ shopify_identity_conflicts : has
   stores ||--o{ shopify_oauth_states : has
   users ||--o{ shopify_oauth_states : starts
 ```
@@ -105,9 +111,32 @@ erDiagram
 - `shopify_webhook_deliveries`: unique `webhook_id` for replay protection
 - `shopify_compliance_requests`: durable privacy webhook work; `processing_lease_expires_at` / `processing_lease_token` for crash-safe reclaim; append-only `shopify_compliance_request_events` (`restrictOnDelete` on parent). Ops: [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md).
 
+### Shopify customer identities (M2 schema)
+
+Migration: `2026_11_12_230000_create_shopify_customer_identity_tables.php`.
+
+**`shopify_customer_identities`**
+- Authoritative key: Shopify Customer GID (`shopify_customer_gid`), unique per `store_id`
+- Optional `contact_id` link; unique `(store_id, contact_id)` with MySQL multiple-NULL allowed
+- No `workspace_id`, no legacy numeric Shopify id column, no email/phone/name PII snapshots
+- `metadata` JSON is non-PII flags/counts only
+- Status values: `tracked` | `unlinked` | `shopify_deleted`
+- Store hard-delete **cascades**; contact hard-delete **nulls** `contact_id`
+- Contact soft-delete **unlinks** linked rows (`contact_id` null, status `unlinked`, `unlinked_at` set) inside the same DB transaction as soft-delete (`Contact::delete` + `softDeleted`); identity + conflict history preserved; consents untouched; restore / import restore do **not** auto-relink
+- A simple `contact_id` FK does **not** enforce same-store ownership — future linking services must validate store ownership transactionally (no linking workflow in M2)
+
+**`shopify_identity_conflicts`**
+- Belongs to an identity (`cascadeOnDelete`); optional `candidate_contact_id` and `resolved_by_user_id` (`nullOnDelete`)
+- No duplicated Shopify GID / `store_id` / `workspace_id` on the conflict row
+- Indexes: `(shopify_customer_identity_id, status)`, `(status, created_at)`
+- `match_signals` / `resolution_meta` must never store raw email or phone
+
+M2 does **not** add sync, webhooks, Admin API, or automatic matching/merging/linking.
+
 ## Foreign-key behavior (summary)
 
-- Deleting a **store** hard-cascades to contacts, tags, segments, imports, exports, OAuth states (soft delete does **not** fire those cascades)
+- Deleting a **store** hard-cascades to contacts, tags, segments, imports, exports, OAuth states, Shopify customer identities (and their conflicts) (soft delete does **not** fire those cascades)
+- Contact hard-delete nulls `shopify_customer_identities.contact_id` and conflict `candidate_contact_id`
 - `workspaces.owner_id` → `restrictOnDelete`
 - `user_workspace_contexts.active_store_id` → `nullOnDelete`
 

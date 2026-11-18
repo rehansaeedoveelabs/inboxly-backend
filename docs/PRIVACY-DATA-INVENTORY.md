@@ -265,12 +265,23 @@ Documentation-only milestone. This inventory is grounded in the current `inboxly
 | NULL-store | `workspace_id` set only from matched Store at intake; unassigned rows exist but are not Admin-API visible — escalate via [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md) |
 | Status | **Verified** implemented in M1 — Partner webhook subscription **not** activated by this repo |
 
-### 1.20 Planned Shopify customer sync tables (not present)
+### 1.20 Shopify customer identities (M2 schema)
 
 | Item | Detail |
 |------|--------|
-| Finding | No `shopify_customer_identities`, conflicts, sync runs, or Customer Events handlers |
-| Status | **Verified absent** — required before customer PII sync (later milestones) |
+| Location | `shopify_customer_identities`, `shopify_identity_conflicts` |
+| Personal data | Shopify Customer GID (platform id); optional Inboxly `contact_id` link; **no** email/phone/name snapshots |
+| Soft-delete contact | Unlinks identity (`contact_id` null, status `unlinked`); preserves identity + conflicts; consents unchanged |
+| Hard-delete contact | FK nulls `contact_id` / candidate contact; identity retained |
+| Hard-delete store | Cascades identities and conflicts |
+| Status | **Verified** schema present (M2) — sync/Customer Events / Admin link still **absent** |
+
+### 1.21 Planned Shopify sync runtime (not present)
+
+| Item | Detail |
+|------|--------|
+| Finding | No sync runs table, Customer Events handlers, or Admin linking/matching workflows |
+| Status | **Verified absent** — required before durable Shopify customer PII sync (later milestones) |
 
 ---
 
@@ -278,7 +289,7 @@ Documentation-only milestone. This inventory is grounded in the current `inboxly
 
 | Mechanism | Effect on PII | Evidence |
 |-----------|---------------|----------|
-| Contact soft-delete | PII retained; unique indexes still hold; consents/events/recipients remain | `ContactController::destroy`; SoftDeletes |
+| Contact soft-delete | PII retained; unique indexes still hold; consents/events/recipients remain; linked Shopify identities unlinked (not deleted) | `ContactController::destroy`; `Contact::booted` softDeleted |
 | Contact hard-delete | Cascades consents, events, tag pivots, recipients | FK `cascadeOnDelete` |
 | ConsentEvent Eloquent delete | Blocked in app | `ConsentEvent::booted` |
 | Store soft-delete | Clears Shopify credentials/identity on model boot; **does not** cascade-delete contacts | `Store::booted`; DATABASE.md |
@@ -315,7 +326,7 @@ Documentation-only milestone. This inventory is grounded in the current `inboxly
 
 | Requirement | Status |
 |-------------|--------|
-| Record deletion/unlink separately from privacy redact | Future identity `unlinked` — **Recommendation** |
+| Record deletion/unlink separately from privacy redact | Identity status `unlinked` / `shopify_deleted` columns exist (M2 schema); runtime Shopify-delete marking still **Recommendation** |
 | Block stale sync/event recreate | **Recommendation** |
 | Do not delete Inboxly contact | **Approved** |
 | Do not alter Inboxly consent | **Approved** |

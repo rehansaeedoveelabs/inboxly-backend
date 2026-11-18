@@ -75,7 +75,7 @@ Admin DELETE connection → best-effort remote revoke → clear local credential
 
 1. **List:** cursor pagination (`created_at DESC`, `id DESC`) with filters `q` (email prefix), `tag`, `consent_email` via shared `ContactListQuery`.
 2. **Create:** requires email or phone; creates three `nonsubscribed` consent rows. Soft-deleted identity clash → **409** `contact_deleted` unless `restore=true`.
-3. **Update / soft-delete / show:** policy via owning store.
+3. **Update / soft-delete / show:** policy via owning store. Soft-delete unlinks any linked `shopify_customer_identities` (status `unlinked`, `unlinked_at` set) without changing consents or conflict history; restore does not auto-relink.
 4. **Tags:** attach/detach with store ownership checks (`ContactTagController`, `AttachTags`).
 5. **Consents:** `PUT .../consents` → `UpdateContactConsents` (transactional; appends `ConsentEvent` only on change).
 
@@ -96,9 +96,9 @@ No import list/cancel endpoints.
 **Routes:** `POST /api/v1/contacts/{contact}/restore` (withTrashed), `POST /api/v1/contacts/{contact}/consent-review`
 **Code:** `RestoreContact`, `ReviewContactConsents`
 
-1. **Restore:** locks row, restores soft-deleted contact, sets `consent_review_required_at`, **does not** change consent statuses or rewrite events.
+1. **Restore:** locks row, restores soft-deleted contact, sets `consent_review_required_at`, **does not** change consent statuses or rewrite events, and **does not** re-link previously unlinked Shopify customer identities.
 2. **Consent review:** clears `consent_review_required_at` only (no status/event mutation).
-3. `Contact::isMarketingEligible()` returns false while trashed or review-required — reserved for future sending (unused by campaigns today).
+3. `Contact::isMarketingEligible()` returns false while trashed or review-required; campaign recipient resolution and `ProcessCampaignSendJob` both enforce it before send.
 
 ## 8. Segment creation and preview
 

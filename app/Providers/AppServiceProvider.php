@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Events\ContactEmailSubscribed;
+use App\Events\ContactTagAdded;
+use App\Listeners\EnrollContactOnTagAdded;
+use App\Listeners\EnrollContactOnEmailSubscribed;
 use App\Support\Messaging\BrevoEmailSender;
 use App\Support\Messaging\Contracts\EmailSender;
 use App\Support\Messaging\Contracts\SmsSender;
@@ -14,6 +18,7 @@ use App\Support\Meta\GraphMetaProvider;
 use App\Support\Shopify\ShopifyComplianceRuntimeGuard;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -53,6 +58,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Password::defaults(fn () => Password::min(8));
+
+        Event::listen(ContactEmailSubscribed::class, EnrollContactOnEmailSubscribed::class);
+        Event::listen(ContactTagAdded::class, EnrollContactOnTagAdded::class);
 
         // M1 compliance: warn on unsafe lease/queue/pcntl posture (does not read worker CLI flags).
         ShopifyComplianceRuntimeGuard::evaluate(log: true);

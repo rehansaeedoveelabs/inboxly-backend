@@ -101,6 +101,11 @@ class Store extends Model
         return $this->hasMany(Contact::class);
     }
 
+    public function shopifyCustomerIdentities(): HasMany
+    {
+        return $this->hasMany(ShopifyCustomerIdentity::class);
+    }
+
     public function tags(): HasMany
     {
         return $this->hasMany(Tag::class);
@@ -124,6 +129,11 @@ class Store extends Model
     public function campaigns(): HasMany
     {
         return $this->hasMany(Campaign::class);
+    }
+
+    public function automations(): HasMany
+    {
+        return $this->hasMany(Automation::class);
     }
 
     public function assets(): HasMany

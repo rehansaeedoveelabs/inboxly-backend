@@ -93,4 +93,4 @@ Intake sets `workspace_id` only from a matched Store. Unknown shops (common for 
 - Commands are not paging/alerting.
 - External backups/log archives remain ops responsibility (`shop/redact` does not claim them).
 - Partner Dashboard / TOML subscription activation is out of band.
-- No M2 customer identity sync in this milestone.
+- No customer identity sync in M1. M2 adds identity/conflict **schema only** (no sync).
