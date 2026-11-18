@@ -35,7 +35,9 @@ class StartCampaignSend
             $smsDriver = (string) config('services.messaging.sms_driver', 'disabled');
             if ($smsDriver === 'disabled') {
                 throw ValidationException::withMessages([
-                    'channel' => ['SMS sending is disabled. Set MESSAGING_SMS_DRIVER=fake for local fake delivery.'],
+                    'channel' => [
+                        'SMS sending is disabled. Set MESSAGING_SMS_DRIVER=fake for local fake delivery, or vonage with VONAGE_SMS_SENDING_ENABLED=true for real SMS.',
+                    ],
                 ]);
             }
         }

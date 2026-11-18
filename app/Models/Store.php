@@ -106,6 +106,72 @@ class Store extends Model
         return $this->hasMany(ShopifyCustomerIdentity::class);
     }
 
+    public function shopifySyncRuns(): HasMany
+    {
+        return $this->hasMany(ShopifySyncRun::class);
+    }
+
+    public function shopifyProducts(): HasMany
+    {
+        return $this->hasMany(ShopifyProduct::class);
+    }
+
+    public function shopifyOrders(): HasMany
+    {
+        return $this->hasMany(ShopifyOrder::class);
+    }
+
+    public function latestShopifySyncRun(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(ShopifySyncRun::class)->latestOfMany('created_at');
+    }
+
+    /**
+     * Compact sync summary for StoreResource / sync status API.
+     *
+     * @return array{
+     *     status: string|null,
+     *     finished_at: mixed,
+     *     started_at: mixed,
+     *     customers_synced: int,
+     *     products_synced: int,
+     *     orders_synced: int,
+     *     run_id: string|null,
+     *     error_code: string|null
+     * }
+     */
+    public function shopifySyncSummary(): array
+    {
+        $run = $this->relationLoaded('latestShopifySyncRun')
+            ? $this->latestShopifySyncRun
+            : $this->shopifySyncRuns()->orderByDesc('created_at')->first();
+
+        if ($run === null) {
+            return [
+                'status' => null,
+                'finished_at' => null,
+                'started_at' => null,
+                'customers_synced' => 0,
+                'products_synced' => 0,
+                'orders_synced' => 0,
+                'run_id' => null,
+                'error_code' => null,
+            ];
+        }
+
+        return [
+            'status' => $run->status->value,
+            'finished_at' => $run->finished_at,
+            'started_at' => $run->started_at,
+            'customers_synced' => (int) $run->customers_synced,
+            'products_synced' => (int) $run->products_synced,
+            'orders_synced' => (int) $run->orders_synced,
+            'run_id' => $run->getKey(),
+            'error_code' => $run->error_code,
+        ];
+    }
+
+
     public function tags(): HasMany
     {
         return $this->hasMany(Tag::class);

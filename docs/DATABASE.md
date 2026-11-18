@@ -13,6 +13,9 @@ users
               └── stores
                     ├── contacts → consents / consent_events / tags
                     ├── shopify_customer_identities → shopify_identity_conflicts
+                    ├── shopify_sync_runs
+                    ├── shopify_products
+                    ├── shopify_orders
                     ├── tags
                     ├── segments
                     ├── contact_imports
@@ -42,6 +45,9 @@ Per-user store selection: `user_workspace_contexts (user_id, workspace_id) → a
 | `shopify_webhook_deliveries` | Webhook idempotency | No |
 | `shopify_customer_identities` | Store-scoped Shopify Customer GID; optional contact link | No |
 | `shopify_identity_conflicts` | Explicit Admin-resolution identity conflicts | No |
+| `shopify_sync_runs` | Commerce sync job progress (customers/products/orders) | No |
+| `shopify_products` | Synced product catalog snapshot | No |
+| `shopify_orders` | Synced order snapshot (no customer email/phone/address) | No |
 | `sessions`, `jobs`, `failed_jobs`, `cache`, … | Framework | — |
 
 ## Relationships (ER)
@@ -56,6 +62,9 @@ erDiagram
   stores ||--o| user_workspace_contexts : active
   stores ||--o{ contacts : has
   stores ||--o{ shopify_customer_identities : has
+  stores ||--o{ shopify_sync_runs : has
+  stores ||--o{ shopify_products : has
+  stores ||--o{ shopify_orders : has
   stores ||--o{ tags : has
   stores ||--o{ segments : has
   stores ||--o{ contact_imports : has

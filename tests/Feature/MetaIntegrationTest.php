@@ -359,6 +359,75 @@ class MetaIntegrationTest extends TestCase
         $this->assertSame(MetaConnectionStatus::NeedsReauth, $connection->fresh()->status);
     }
 
+    public function test_discover_falls_back_to_granular_page_targets_when_accounts_empty(): void
+    {
+        config([
+            'services.meta.driver' => 'meta',
+            'services.meta.app_id' => 'app-123',
+            'services.meta.app_secret' => 'secret-123',
+            'services.meta.redirect_uri' => 'https://example.test/api/v1/meta/oauth/callback',
+            'services.meta.graph_version' => 'v25.0',
+        ]);
+        $this->app->forgetInstance(MetaProvider::class);
+        $this->app->singleton(MetaProvider::class, fn () => new GraphMetaProvider);
+
+        [$admin, $workspace] = $this->adminWithWorkspace();
+        $store = $this->storeIn($workspace);
+
+        $connection = new MetaConnection([
+            'store_id' => $store->id,
+            'meta_user_id' => 'user-1',
+            'status' => MetaConnectionStatus::Connected,
+            'connected_at' => now(),
+        ]);
+        $connection->user_access_token = 'user-token-with-granular-pages';
+        $connection->save();
+
+        Http::fake([
+            'https://graph.facebook.com/v25.0/me/accounts*' => Http::response(['data' => []], 200),
+            'https://graph.facebook.com/v25.0/debug_token*' => Http::response([
+                'data' => [
+                    'is_valid' => true,
+                    'scopes' => ['pages_show_list', 'pages_read_engagement', 'pages_manage_posts'],
+                    'granular_scopes' => [
+                        [
+                            'scope' => 'pages_show_list',
+                            'target_ids' => ['103240691693536'],
+                        ],
+                        [
+                            'scope' => 'pages_manage_posts',
+                            'target_ids' => ['103240691693536'],
+                        ],
+                    ],
+                ],
+            ], 200),
+            'https://graph.facebook.com/v25.0/103240691693536*' => Http::response([
+                'id' => '103240691693536',
+                'name' => 'Honey Mames',
+                'access_token' => 'page-token-honey',
+            ], 200),
+        ]);
+
+        $this->spa()->actingAs($admin)
+            ->getJson("/api/v1/stores/{$store->id}/meta/pages/discover")
+            ->assertOk()
+            ->assertJsonPath('data.pages.0.id', '103240691693536')
+            ->assertJsonPath('data.pages.0.name', 'Honey Mames')
+            ->assertJsonPath('data.pages.0.tasks.0', 'CREATE_CONTENT');
+
+        $this->spa()->actingAs($admin)
+            ->postJson("/api/v1/stores/{$store->id}/meta/pages/select", [
+                'page_ids' => ['103240691693536'],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.0.meta_page_id', '103240691693536');
+
+        $page = MetaPage::query()->where('store_id', $store->id)->first();
+        $this->assertNotNull($page);
+        $this->assertSame('page-token-honey', $page->page_access_token);
+        $this->assertTrue($page->canPublishContent());
+    }
+
     public function test_oauth_start_is_rate_limited(): void
     {
         RateLimiter::clear('meta-oauth');

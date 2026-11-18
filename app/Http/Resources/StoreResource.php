@@ -26,6 +26,8 @@ class StoreResource extends JsonResource
             'shopify_scopes' => $this->grantedShopifyScopes(),
             'missing_shopify_scopes' => $this->missingShopifyScopes(),
             'requires_shopify_reauth' => $this->requiresShopifyReauth(),
+            // Compact commerce sync summary (GID customers / products / orders).
+            'shopify_sync' => $this->shopifySyncSummary(),
             // Identity only — never expose access/refresh tokens here.
             'timezone' => $this->timezone,
             'currency' => $this->currency,

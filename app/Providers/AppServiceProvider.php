@@ -12,6 +12,7 @@ use App\Support\Messaging\Contracts\SmsSender;
 use App\Support\Messaging\DisabledSmsSender;
 use App\Support\Messaging\FakeEmailSender;
 use App\Support\Messaging\FakeSmsSender;
+use App\Support\Messaging\VonageSmsSender;
 use App\Support\Meta\Contracts\MetaProvider;
 use App\Support\Meta\FakeMetaProvider;
 use App\Support\Meta\GraphMetaProvider;
@@ -41,6 +42,7 @@ class AppServiceProvider extends ServiceProvider
 
             return match ($driver) {
                 'fake' => $this->app->make(FakeSmsSender::class),
+                'vonage' => $this->app->make(VonageSmsSender::class),
                 default => $this->app->make(DisabledSmsSender::class),
             };
         });

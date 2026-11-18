@@ -68,7 +68,7 @@ return [
     'messaging' => [
         // email_driver: fake | brevo — always defaults to fake; real sends need explicit env + BREVO_SENDING_ENABLED.
         'email_driver' => env('MESSAGING_EMAIL_DRIVER', 'fake'),
-        // sms_driver: disabled | fake (real SMS provider not wired yet)
+        // sms_driver: disabled | fake | vonage (vonage requires integration + VONAGE_SMS_SENDING_ENABLED).
         'sms_driver' => env('MESSAGING_SMS_DRIVER', 'disabled'),
         'batch_size' => (int) env('CAMPAIGN_SEND_BATCH_SIZE', 100),
         'max_attempts' => (int) env('CAMPAIGN_SEND_MAX_ATTEMPTS', 3),
@@ -76,6 +76,24 @@ return [
         'recipient_lease_seconds' => (int) env('CAMPAIGN_RECIPIENT_LEASE_SECONDS', 120),
         // 0 = unlimited
         'daily_cap_per_store' => (int) env('CAMPAIGN_DAILY_CAP_PER_STORE', 500),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vonage (Nexmo) SMS
+    |--------------------------------------------------------------------------
+    |
+    | Paste credentials in .env for local testing. Real sends require
+    | MESSAGING_SMS_DRIVER=vonage and VONAGE_SMS_SENDING_ENABLED=true.
+    |
+    */
+    'vonage' => [
+        'api_key' => env('VONAGE_API_KEY'),
+        'api_secret' => env('VONAGE_API_SECRET'),
+        'from' => env('VONAGE_FROM'),
+        'sending_enabled' => (bool) env('VONAGE_SMS_SENDING_ENABLED', false),
+        'timeout_seconds' => (int) env('VONAGE_TIMEOUT_SECONDS', 20),
+        'base_url' => env('VONAGE_BASE_URL', 'https://rest.nexmo.com'),
     ],
 
     /*
@@ -141,6 +159,11 @@ return [
         'compliance_recover_limit' => (int) env('SHOPIFY_COMPLIANCE_RECOVER_LIMIT', 50),
         // Ops report: age threshold for "old received" (inspection only — not alerting).
         'compliance_ops_received_older_than_seconds' => (int) env('SHOPIFY_COMPLIANCE_OPS_RECEIVED_OLDER_THAN', 3600),
+        // Commerce sync (customers GID / products / orders) Admin GraphQL.
+        'graphql_timeout_seconds' => (int) env('SHOPIFY_GRAPHQL_TIMEOUT_SECONDS', 20),
+        'sync_page_size' => (int) env('SHOPIFY_SYNC_PAGE_SIZE', 50),
+        'sync_max_pages_per_attempt' => (int) env('SHOPIFY_SYNC_MAX_PAGES_PER_ATTEMPT', 5),
+        'sync_lease_seconds' => (int) env('SHOPIFY_SYNC_LEASE_SECONDS', 180),
     ],
 
     /*
@@ -181,7 +204,11 @@ return [
         // Legacy env retained for compatibility. Fake publishing is hard-denied outside
         // local/testing regardless of this flag (see MetaDriverGuard).
         'allow_fake_publish' => (bool) env('META_ALLOW_FAKE_PUBLISH', false),
-        // Comma-separated Login scopes. Order does not matter to Meta.
+        // Facebook Login for Business configuration id (preferred). When set,
+        // OAuth uses config_id and does not send META_SCOPES on the dialog URL.
+        'config_id' => env('META_CONFIG_ID'),
+        // Comma-separated Login scopes. Used only when META_CONFIG_ID is empty.
+        // Order does not matter to Meta.
         'scopes' => array_values(array_filter(array_map(
             'trim',
             explode(',', (string) env(
