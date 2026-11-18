@@ -25,16 +25,28 @@ class GraphMetaProvider implements MetaProvider
         $this->assertConfigured();
 
         $version = $this->graphVersion();
-        $scopes = config('services.meta.scopes', []);
-        $scopeString = is_array($scopes) ? implode(',', $scopes) : '';
-
-        return 'https://www.facebook.com/'.$version.'/dialog/oauth?'.http_build_query([
+        $params = [
             'client_id' => (string) config('services.meta.app_id'),
             'redirect_uri' => (string) config('services.meta.redirect_uri'),
             'state' => $state,
-            'scope' => $scopeString,
             'response_type' => 'code',
-        ]);
+        ];
+
+        // Facebook Login for Business: prefer config_id (scopes come from the
+        // dashboard configuration). Passing raw scope with FL4B often yields
+        // "Invalid Scopes" for pages_* permissions.
+        $configId = trim((string) config('services.meta.config_id', ''));
+        if ($configId !== '') {
+            $params['config_id'] = $configId;
+        } else {
+            $scopes = config('services.meta.scopes', []);
+            $scopeString = is_array($scopes) ? implode(',', $scopes) : '';
+            if ($scopeString !== '') {
+                $params['scope'] = $scopeString;
+            }
+        }
+
+        return 'https://www.facebook.com/'.$version.'/dialog/oauth?'.http_build_query($params);
     }
 
     public function exchangeAuthorizationCode(string $code): array
@@ -85,6 +97,45 @@ class GraphMetaProvider implements MetaProvider
 
     public function listManagedPages(string $userAccessToken): array
     {
+        /** @var array<string, DiscoveredMetaPage> $byId */
+        $byId = [];
+
+        foreach ($this->listPagesFromAccountsEdge($userAccessToken) as $page) {
+            $byId[$page->id] = $page;
+        }
+
+        // Facebook Login for Business often grants Page access via granular
+        // target_ids while leaving GET /me/accounts empty. Resolve those Pages
+        // directly so Discover still surfaces the selected asset(s).
+        $granular = $this->granularPageScopes($userAccessToken);
+        foreach (array_keys($granular) as $pageId) {
+            $inferredTasks = $this->tasksFromPageScopes($granular[$pageId]);
+            if (isset($byId[$pageId])) {
+                if ($byId[$pageId]->tasks === [] && $inferredTasks !== []) {
+                    $existing = $byId[$pageId];
+                    $byId[$pageId] = new DiscoveredMetaPage(
+                        $existing->id,
+                        $existing->name,
+                        $inferredTasks,
+                        $existing->accessToken,
+                    );
+                }
+                continue;
+            }
+            $page = $this->fetchPageById($pageId, $userAccessToken, $inferredTasks);
+            if ($page !== null) {
+                $byId[$page->id] = $page;
+            }
+        }
+
+        return array_values($byId);
+    }
+
+    /**
+     * @return list<DiscoveredMetaPage>
+     */
+    private function listPagesFromAccountsEdge(string $userAccessToken): array
+    {
         $pages = [];
         $after = null;
 
@@ -105,26 +156,10 @@ class GraphMetaProvider implements MetaProvider
             }
 
             foreach ($data as $row) {
-                if (! is_array($row)) {
-                    continue;
+                $page = $this->discoveredPageFromGraphRow($row);
+                if ($page !== null) {
+                    $pages[] = $page;
                 }
-                $id = isset($row['id']) && is_string($row['id']) ? $row['id'] : '';
-                $name = isset($row['name']) && is_string($row['name']) ? $row['name'] : '';
-                $token = isset($row['access_token']) && is_string($row['access_token'])
-                    ? $row['access_token']
-                    : null;
-                if ($id === '' || $name === '') {
-                    continue;
-                }
-                $tasks = [];
-                if (isset($row['tasks']) && is_array($row['tasks'])) {
-                    foreach ($row['tasks'] as $task) {
-                        if (is_string($task) && $task !== '') {
-                            $tasks[] = $task;
-                        }
-                    }
-                }
-                $pages[] = new DiscoveredMetaPage($id, $name, $tasks, $token);
             }
 
             $after = $json['paging']['cursors']['after'] ?? null;
@@ -132,6 +167,165 @@ class GraphMetaProvider implements MetaProvider
         } while ($hasNext && is_string($after) && $after !== '');
 
         return $pages;
+    }
+
+    /**
+     * Map Page id => list of pages_* scopes granted for that target via FL4B.
+     *
+     * @return array<string, list<string>>
+     */
+    private function granularPageScopes(string $userAccessToken): array
+    {
+        try {
+            $this->assertConfigured();
+        } catch (MetaOAuthException) {
+            return [];
+        }
+
+        $appId = trim((string) config('services.meta.app_id'));
+        $secret = trim((string) config('services.meta.app_secret'));
+        if ($appId === '' || $secret === '') {
+            return [];
+        }
+
+        try {
+            $json = $this->graphGet('debug_token', [
+                'input_token' => $userAccessToken,
+                'access_token' => $appId.'|'.$secret,
+            ]);
+        } catch (MetaOAuthException) {
+            return [];
+        }
+
+        $data = is_array($json['data'] ?? null) ? $json['data'] : null;
+        if ($data === null) {
+            return [];
+        }
+
+        $granular = $data['granular_scopes'] ?? null;
+        if (! is_array($granular)) {
+            return [];
+        }
+
+        /** @var array<string, array<string, true>> $byPage */
+        $byPage = [];
+        foreach ($granular as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+            $scope = isset($entry['scope']) && is_string($entry['scope']) ? $entry['scope'] : '';
+            if ($scope === '' || ! str_starts_with($scope, 'pages_')) {
+                continue;
+            }
+            $targets = $entry['target_ids'] ?? null;
+            if (! is_array($targets)) {
+                continue;
+            }
+            foreach ($targets as $targetId) {
+                $id = null;
+                if (is_string($targetId) && $targetId !== '') {
+                    $id = $targetId;
+                } elseif (is_int($targetId) || is_float($targetId)) {
+                    $id = (string) $targetId;
+                }
+                if ($id === null) {
+                    continue;
+                }
+                $byPage[$id][$scope] = true;
+            }
+        }
+
+        $out = [];
+        foreach ($byPage as $pageId => $scopes) {
+            $out[$pageId] = array_keys($scopes);
+        }
+
+        return $out;
+    }
+
+    /**
+     * FL4B Page nodes do not expose the classic `tasks` field. Map granted
+     * pages_* scopes onto the task labels Inboxly already gates on.
+     *
+     * @param  list<string>  $scopes
+     * @return list<string>
+     */
+    private function tasksFromPageScopes(array $scopes): array
+    {
+        $tasks = [];
+        if (in_array('pages_manage_posts', $scopes, true)) {
+            $tasks[] = 'CREATE_CONTENT';
+        }
+        if (
+            in_array('pages_manage_metadata', $scopes, true)
+            || in_array('pages_manage_posts', $scopes, true)
+        ) {
+            $tasks[] = 'MANAGE';
+        }
+        if (in_array('pages_read_engagement', $scopes, true)) {
+            $tasks[] = 'ANALYZE';
+        }
+
+        return array_values(array_unique($tasks));
+    }
+
+    /**
+     * @param  list<string>  $fallbackTasks
+     */
+    private function fetchPageById(
+        string $pageId,
+        string $userAccessToken,
+        array $fallbackTasks = [],
+    ): ?DiscoveredMetaPage {
+        // FL4B Page nodes reject `tasks` on this edge; request only what we need.
+        try {
+            $json = $this->graphGet($pageId, [
+                'fields' => 'id,name,access_token',
+                'access_token' => $userAccessToken,
+            ]);
+        } catch (MetaOAuthException) {
+            return null;
+        }
+
+        $page = $this->discoveredPageFromGraphRow($json);
+        if ($page === null) {
+            return null;
+        }
+        if ($page->tasks === [] && $fallbackTasks !== []) {
+            return new DiscoveredMetaPage($page->id, $page->name, $fallbackTasks, $page->accessToken);
+        }
+
+        return $page;
+    }
+
+    /**
+     * @param  mixed  $row
+     */
+    private function discoveredPageFromGraphRow(mixed $row): ?DiscoveredMetaPage
+    {
+        if (! is_array($row)) {
+            return null;
+        }
+
+        $id = isset($row['id']) && is_string($row['id']) ? $row['id'] : '';
+        $name = isset($row['name']) && is_string($row['name']) ? $row['name'] : '';
+        $token = isset($row['access_token']) && is_string($row['access_token'])
+            ? $row['access_token']
+            : null;
+        if ($id === '' || $name === '') {
+            return null;
+        }
+
+        $tasks = [];
+        if (isset($row['tasks']) && is_array($row['tasks'])) {
+            foreach ($row['tasks'] as $task) {
+                if (is_string($task) && $task !== '') {
+                    $tasks[] = $task;
+                }
+            }
+        }
+
+        return new DiscoveredMetaPage($id, $name, $tasks, $token);
     }
 
     public function inspectUserAccessToken(string $userAccessToken): ?array
