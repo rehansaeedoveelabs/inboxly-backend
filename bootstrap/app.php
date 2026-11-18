@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('shopify:prune-oauth-states')->hourly();
         $schedule->command('contact-exports:prune')->daily();
         $schedule->command('campaigns:dispatch-due')->everyMinute();
+        $schedule->command('automations:dispatch-due')->everyMinute();
         // M1 compliance: stranded received + expired processing leases. Requires schedule:run.
         // withoutOverlapping prevents concurrent recover runs; this is recovery, not alerting.
         $schedule->command('shopify:recover-compliance-requests')

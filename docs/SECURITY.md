@@ -75,10 +75,10 @@ Inline throttles also protect Shopify OAuth start/callback/webhooks and email ve
 
 ## Privacy and Shopify customer data
 
-- Soft-deleting a contact retains PII and related consents/events; soft delete is **not** privacy erasure.
-- Consent events are append-only in Eloquent but hard-delete of a contact still cascades at the database FK.
+- Soft-deleting a contact retains PII and related consents/events; soft delete is **not** privacy erasure. Soft-delete also unlinks any `shopify_customer_identities` for that contact (status `unlinked`) without changing consents or deleting identity/conflict history; restore does not auto-relink.
+- Consent events are append-only in Eloquent but hard-delete of a contact still cascades at the database FK (identity `contact_id` nulls via FK).
 - Contact export CSVs on the private disk expire after `ContactExport::EXPIRY_DAYS` (7) when prune runs; that constant is an application TTL, not a legal retention schedule.
-- Shopify customer sync is **not** implemented. Storing synchronized Shopify customer PII remains gated on privacy/compliance **production** readiness (Partner subscription activation, legal decisions, ops backups). See [PRIVACY-DATA-INVENTORY.md](PRIVACY-DATA-INVENTORY.md).
+- M2 stores Shopify Customer GIDs in `shopify_customer_identities` (optional contact link; no PII snapshots). Sync, matching, merging, and Admin link workflows are **not** implemented. Storing synchronized Shopify customer PII remains gated on privacy/compliance **production** readiness (Partner subscription activation, legal decisions, ops backups). See [PRIVACY-DATA-INVENTORY.md](PRIVACY-DATA-INVENTORY.md) and [DATABASE.md](DATABASE.md).
 - Compliance webhook **intake and processing** for `customers/data_request`, `customers/redact`, and `shop/redact` are implemented in-app (HMAC, durable requests, queued processors with processing leases, Admin APIs). `shopify_webhook_deliveries.processed_at` means delivery **accepted**, not privacy work completed — completion lives on `shopify_compliance_requests`.
 - HTTPS deliveries with a non-JSON `Content-Type` are rejected after HMAC; `application/json` (optional charset) and missing Content-Type remain accepted.
 - Processing uses a configurable lease (`SHOPIFY_COMPLIANCE_PROCESSING_LEASE_SECONDS`, default 300). Expired-lease `processing` and stranded `received` are rediscovered by scheduled `shopify:recover-compliance-requests` (not an alerting system). See [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md).

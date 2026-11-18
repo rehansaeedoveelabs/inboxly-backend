@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\AssetController;
+use App\Http\Controllers\Api\V1\AutomationController;
 use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
@@ -25,6 +26,7 @@ use App\Http\Controllers\Api\V1\Shopify\ShopifyOAuthController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyWebhookController;
 use App\Http\Controllers\Api\V1\StoreActivationController;
 use App\Http\Controllers\Api\V1\StoreController;
+use App\Http\Controllers\Api\V1\StoreInsightsController;
 use App\Http\Controllers\Api\V1\TagController;
 use App\Http\Controllers\Api\V1\WorkspaceController;
 use App\Http\Controllers\Api\V1\WorkspaceInvitationController;
@@ -177,6 +179,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('contact-exports/{contactExport}/download', [ContactExportController::class, 'download'])
         ->middleware('throttle:contact-exports');
 
+    Route::get('stores/{store}/insights/overview', [StoreInsightsController::class, 'overview']);
     Route::get('stores/{store}/campaigns/summary', [CampaignController::class, 'summary']);
     Route::post('stores/{store}/campaigns/audience-preview', [CampaignController::class, 'audiencePreview']);
     Route::get('stores/{store}/campaigns', [CampaignController::class, 'index']);
@@ -192,6 +195,16 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:campaign-send');
     Route::post('campaigns/{campaign}/test-send', [CampaignController::class, 'testSend'])
         ->middleware('throttle:campaign-test-send');
+
+    Route::get('stores/{store}/automations/summary', [AutomationController::class, 'summary']);
+    Route::get('stores/{store}/automations', [AutomationController::class, 'index']);
+    Route::post('stores/{store}/automations', [AutomationController::class, 'store']);
+    Route::get('automations/{automation}', [AutomationController::class, 'show']);
+    Route::put('automations/{automation}', [AutomationController::class, 'update']);
+    Route::post('automations/{automation}/activate', [AutomationController::class, 'activate']);
+    Route::post('automations/{automation}/pause', [AutomationController::class, 'pause']);
+    Route::post('automations/{automation}/archive', [AutomationController::class, 'archive']);
+    Route::get('automations/{automation}/enrollments', [AutomationController::class, 'enrollments']);
 
     Route::get('campaigns/{campaign}/meta/eligible-pages', [CampaignMetaPublicationController::class, 'eligiblePages'])
         ->name('campaigns.meta.eligible-pages');

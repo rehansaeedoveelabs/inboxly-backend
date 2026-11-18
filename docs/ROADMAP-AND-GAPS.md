@@ -17,6 +17,8 @@ Honest inventory of what this backend implements versus what is incomplete or on
 | Imports | Queued JSON-row import job |
 | Exports | Queued CSV, atomic claims, download, prune command |
 | Automated tests | Broad Feature/Unit coverage under `tests/` |
+| Campaigns (email) | Draft/schedule/send/test-send pipeline; Meta publish support; SMS channel rejected until a provider ships |
+| Welcome Automation | `contact.email_subscribed` trigger, linear delay + send_email steps, enrollments/runs, activate/pause/archive, `automations:dispatch-due` scheduler; local sends use the **fake** email driver |
 
 ## Incomplete (backend)
 
@@ -33,7 +35,7 @@ Honest inventory of what this backend implements versus what is incomplete or on
 | Import list/cancel | Show-by-id only |
 | Export ↔ segments | Exports filter like contact list; cannot target a segment id |
 | Consent event read API | Events written; no list endpoint |
-| `isMarketingEligible` usage | Helper exists; no campaigns/sends call it |
+| SMS campaign sending | Channel can be drafted; `StartCampaignSend` rejects SMS until a provider ships |
 | Personal access tokens | Migration present; SPA unused |
 
 ## Frontend integration gaps (companion repo)
@@ -48,17 +50,25 @@ Honest inventory of what this backend implements versus what is incomplete or on
 
 ## Mock / stub on frontend (not backend features)
 
-Campaigns, automation, forms, analytics/live, image library, brand assets, channel settings, and most of dashboard metrics are **UI mocks** in `inboxly-frontend`. They must not be documented as live product capabilities.
+Forms, analytics/live, image library, brand assets, channel settings, and most of dashboard metrics are **UI mocks** in `inboxly-frontend`. They must not be documented as live product capabilities.
+
+**Not mock:** Campaigns (email) and Welcome Automation are wired to this backend in `inboxly-frontend` (`campaignsApi.js`, `automationsApi.js`). Local/dev email delivery uses the **fake** mail driver unless SMTP is configured.
+
+## Deferred automation / marketing features (partially shipped)
+
+- Visual automation canvas / graph editor — **still deferred**
+- Simple linear condition branch (`condition` step) + `contact.tag_added` trigger — **shipped** (thin slice; not a canvas)
+- SMS campaign send via `MESSAGING_SMS_DRIVER=fake` — **shipped** locally; real SMS provider still deferred
+- Live store insights overview (`GET .../insights/overview`) + dashboard wiring — **shipped** (no revenue analytics yet)
+- Real Brevo delivery — available via env (`MESSAGING_EMAIL_DRIVER=brevo` + `BREVO_SENDING_ENABLED=true`); defaults remain fake
 
 ## Planned / not present in backend code
 
-- Shopify customer identity store, conflict/link workflows, and customer sync (initial + Customer Events)
+- Shopify customer identity **schema** exists (M2: `shopify_customer_identities` + `shopify_identity_conflicts`); conflict/link Admin workflows and customer sync (initial + Customer Events) remain unimplemented
 - Staging/production activation of Shopify compliance webhook subscriptions (M1 code exists; activation gated)
 - Non-Shopify store platforms (`StorePlatform` is Shopify-only)
 - Required Redis/Horizon
 - Required S3/R2 for exports (disk config exists; export job hardcodes `local`)
-
-Campaign send, templates, and Meta publishing exist in code beyond earlier stubs; treat remaining “mock-only” claims as frontend-specific where noted above.
 
 ## Production-readiness gaps
 

@@ -68,7 +68,7 @@ return [
     'messaging' => [
         // email_driver: fake | brevo — always defaults to fake; real sends need explicit env + BREVO_SENDING_ENABLED.
         'email_driver' => env('MESSAGING_EMAIL_DRIVER', 'fake'),
-        // sms_driver: disabled | fake (SMS provider deferred)
+        // sms_driver: disabled | fake (real SMS provider not wired yet)
         'sms_driver' => env('MESSAGING_SMS_DRIVER', 'disabled'),
         'batch_size' => (int) env('CAMPAIGN_SEND_BATCH_SIZE', 100),
         'max_attempts' => (int) env('CAMPAIGN_SEND_MAX_ATTEMPTS', 3),

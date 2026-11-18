@@ -84,8 +84,10 @@ class CampaignSendHardeningTest extends TestCase
             ->assertJsonPath('data.accepted', true);
     }
 
-    public function test_sms_send_is_rejected(): void
+    public function test_sms_send_is_rejected_when_driver_disabled(): void
     {
+        Config::set('services.messaging.sms_driver', 'disabled');
+
         [$admin, $workspace] = $this->adminWithWorkspace();
         $store = $this->storeIn($workspace);
 
@@ -99,6 +101,37 @@ class CampaignSendHardeningTest extends TestCase
         $this->spa()->actingAs($admin)->postJson("/api/v1/campaigns/{$campaignId}/send")
             ->assertUnprocessable()
             ->assertJsonValidationErrors('channel');
+    }
+
+    public function test_sms_send_uses_fake_driver_locally(): void
+    {
+        Config::set('services.messaging.sms_driver', 'fake');
+        $this->app->instance(SmsSender::class, new \App\Support\Messaging\FakeSmsSender);
+
+        [$admin, $workspace] = $this->adminWithWorkspace();
+        $store = $this->storeIn($workspace);
+        $contact = $this->contactIn($store, ['phone' => '+15551234567']);
+        $contact->consents()->where('channel', ConsentChannel::Sms)->update([
+            'status' => ConsentStatus::Subscribed,
+        ]);
+
+        $campaignId = $this->spa()->actingAs($admin)->postJson("/api/v1/stores/{$store->id}/campaigns", [
+            'name' => 'SMS fake',
+            'channel' => 'sms',
+            'body' => 'Hello SMS',
+            'audience_type' => 'all_eligible',
+        ])->assertCreated()->json('data.id');
+
+        // QUEUE_CONNECTION=sync runs ProcessCampaignSendJob before the HTTP response returns.
+        $this->spa()->actingAs($admin)->postJson("/api/v1/campaigns/{$campaignId}/send")
+            ->assertOk()
+            ->assertJsonPath('data.status', CampaignStatus::Sent->value);
+
+        $this->assertDatabaseHas('campaign_recipients', [
+            'campaign_id' => $campaignId,
+            'contact_id' => $contact->id,
+            'status' => CampaignRecipientStatus::Sent->value,
+        ]);
     }
 
     public function test_send_and_test_send_are_rate_limited(): void

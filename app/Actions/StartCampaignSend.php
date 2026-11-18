@@ -32,9 +32,12 @@ class StartCampaignSend
         }
 
         if ($campaign->channel === CampaignChannel::Sms) {
-            throw ValidationException::withMessages([
-                'channel' => ['SMS sending is not available yet.'],
-            ]);
+            $smsDriver = (string) config('services.messaging.sms_driver', 'disabled');
+            if ($smsDriver === 'disabled') {
+                throw ValidationException::withMessages([
+                    'channel' => ['SMS sending is disabled. Set MESSAGING_SMS_DRIVER=fake for local fake delivery.'],
+                ]);
+            }
         }
 
         $this->assertReady($campaign);

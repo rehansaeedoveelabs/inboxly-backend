@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\ConsentChannel;
 use App\Enums\ConsentStatus;
+use App\Enums\ShopifyCustomerIdentityStatus;
 use Database\Factories\ContactFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -13,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 
 class Contact extends Model
 {
@@ -36,6 +38,35 @@ class Contact extends Model
             'metadata' => 'array',
             'consent_review_required_at' => 'datetime',
         ];
+    }
+
+    /**
+     * SoftDeletes overrides performDeleteOnModel (not delete). Wrapping Model::delete
+     * keeps soft-delete + Shopify identity unlink in one transaction.
+     */
+    public function delete()
+    {
+        return DB::transaction(fn () => parent::delete());
+    }
+
+    protected static function booted(): void
+    {
+        // Soft-delete unlinks Shopify identities but preserves GID rows and conflict history.
+        // Restore / import restore must not auto-relink. Consent rows are untouched.
+        // Hard-delete relies on FK nullOnDelete for contact_id (softDeleted does not fire).
+        static::softDeleted(function (Contact $contact) {
+            ShopifyCustomerIdentity::query()
+                ->where('contact_id', $contact->getKey())
+                ->lockForUpdate()
+                ->get()
+                ->each(function (ShopifyCustomerIdentity $identity) {
+                    $identity->forceFill([
+                        'contact_id' => null,
+                        'status' => ShopifyCustomerIdentityStatus::Unlinked,
+                        'unlinked_at' => now(),
+                    ])->save();
+                });
+        });
     }
 
     /**
@@ -117,5 +148,10 @@ class Contact extends Model
     public function tags(): BelongsToMany
     {
         return $this->belongsToMany(Tag::class, 'contact_tag')->withPivot('created_at');
+    }
+
+    public function shopifyCustomerIdentities(): HasMany
+    {
+        return $this->hasMany(ShopifyCustomerIdentity::class);
     }
 }
