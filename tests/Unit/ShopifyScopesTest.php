@@ -112,4 +112,50 @@ class ShopifyScopesTest extends TestCase
             ShopifyScopes::authorizeScopeString(),
         );
     }
+
+    public function test_write_scope_satisfies_matching_read_requirement(): void
+    {
+        $this->assertTrue(ShopifyScopes::grantedSatisfies(
+            'read_customers',
+            ['write_customers', 'read_products'],
+        ));
+        $this->assertFalse(ShopifyScopes::grantedSatisfies(
+            'read_orders',
+            ['write_customers', 'read_products'],
+        ));
+        $this->assertSame(
+            [],
+            ShopifyScopes::missingFromGranted(
+                ['read_customers', 'write_customers', 'read_products'],
+                ['write_customers', 'read_products'],
+            ),
+        );
+        $this->assertSame(
+            ['read_orders'],
+            ShopifyScopes::missingFromGranted(
+                ['read_customers', 'read_orders'],
+                ['write_customers'],
+            ),
+        );
+    }
+
+    public function test_assert_usable_accepts_write_covering_required_read(): void
+    {
+        config([
+            'services.shopify.required_scopes' => [
+                'read_customers',
+                'write_customers',
+                'read_products',
+            ],
+            'services.shopify.scopes' => [
+                'write_customers',
+                'read_products',
+            ],
+        ]);
+
+        $this->assertSame(
+            'write_customers,read_products',
+            ShopifyScopes::authorizeScopeString(),
+        );
+    }
 }

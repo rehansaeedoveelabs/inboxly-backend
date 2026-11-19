@@ -67,7 +67,7 @@ class ShopifyCommerceSyncTest extends TestCase
         Queue::assertNothingPushed();
     }
 
-    public function test_job_upserts_customers_products_orders_without_contact_pii(): void
+    public function test_job_upserts_customers_products_orders_and_materializes_contacts(): void
     {
         [$admin, $store] = $this->connectedStore();
 
@@ -83,9 +83,10 @@ class ShopifyCommerceSyncTest extends TestCase
                                         'node' => [
                                             'id' => 'gid://shopify/Customer/1001',
                                             'updatedAt' => '2026-11-18T10:00:00Z',
-                                            // Even if a bad query leaked these, upsert must ignore them.
-                                            'email' => 'leak@example.com',
-                                            'phone' => '+15555550100',
+                                            'firstName' => 'Sam',
+                                            'lastName' => 'Merchant',
+                                            'defaultEmailAddress' => ['emailAddress' => 'sam.merchant@example.com'],
+                                            'defaultPhoneNumber' => ['phoneNumber' => '+15555550100'],
                                         ],
                                     ],
                                 ],
@@ -173,10 +174,14 @@ class ShopifyCommerceSyncTest extends TestCase
         $this->assertNotNull($identity);
         $this->assertSame('gid://shopify/Customer/1001', $identity->shopify_customer_gid);
         $this->assertSame(ShopifyCustomerIdentityStatus::Tracked, $identity->status);
-        $this->assertNull($identity->contact_id);
-        $this->assertNull($identity->metadata);
+        $this->assertNotNull($identity->contact_id);
 
-        $this->assertSame(0, Contact::query()->where('store_id', $store->id)->count());
+        $contact = Contact::query()->where('store_id', $store->id)->first();
+        $this->assertNotNull($contact);
+        $this->assertSame('sam.merchant@example.com', $contact->email);
+        $this->assertSame('Sam', $contact->first_name);
+        $this->assertSame('shopify', $contact->source);
+        $this->assertSame($contact->id, $identity->contact_id);
 
         $product = ShopifyProduct::query()->where('store_id', $store->id)->first();
         $this->assertNotNull($product);
@@ -203,6 +208,65 @@ class ShopifyCommerceSyncTest extends TestCase
             ->getJson("/api/v1/workspaces/{$store->workspace_id}/stores")
             ->assertOk()
             ->assertJsonPath('data.0.shopify_sync.status', 'succeeded');
+    }
+
+    public function test_customer_sync_skips_phone_when_owned_by_another_contact(): void
+    {
+        [$admin, $store] = $this->connectedStore();
+
+        Contact::factory()->create([
+            'store_id' => $store->id,
+            'email' => 'existing@example.com',
+            'phone' => '+15555550100',
+            'source' => 'manual',
+        ]);
+
+        Http::fake([
+            'https://sync-shop.myshopify.com/admin/api/2026-10/graphql.json' => Http::response([
+                'data' => [
+                    'customers' => [
+                        'edges' => [
+                            [
+                                'node' => [
+                                    'id' => 'gid://shopify/Customer/1002',
+                                    'updatedAt' => '2026-11-18T10:00:00Z',
+                                    'firstName' => 'New',
+                                    'lastName' => 'Customer',
+                                    'defaultEmailAddress' => ['emailAddress' => 'new.customer@example.com'],
+                                    'defaultPhoneNumber' => ['phoneNumber' => '+15555550100'],
+                                ],
+                            ],
+                        ],
+                        'pageInfo' => ['hasNextPage' => false, 'endCursor' => null],
+                    ],
+                ],
+            ]),
+        ]);
+
+        $this->spa()->actingAs($admin)
+            ->postJson("/api/v1/stores/{$store->id}/shopify/sync", [
+                'resources' => ['customers'],
+            ])
+            ->assertStatus(202);
+
+        $run = ShopifySyncRun::query()->first();
+        $this->assertNotNull($run);
+        (new RunShopifyCommerceSyncJob($run->getKey()))->handle(
+            app(\App\Services\Shopify\ShopifyCredentialService::class),
+            app(\App\Actions\Shopify\SyncShopifyCommerceResourcePage::class),
+        );
+
+        $run->refresh();
+        $this->assertSame(ShopifySyncRunStatus::Succeeded, $run->status);
+
+        $contact = Contact::query()->where('store_id', $store->id)->where('email', 'new.customer@example.com')->first();
+        $this->assertNotNull($contact);
+        $this->assertNull($contact->phone);
+        $this->assertSame('shopify', $contact->source);
+
+        $identity = ShopifyCustomerIdentity::query()->where('store_id', $store->id)->first();
+        $this->assertNotNull($identity);
+        $this->assertSame($contact->id, $identity->contact_id);
     }
 
     public function test_pagination_continues_via_redispatch(): void

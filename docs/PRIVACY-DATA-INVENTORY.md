@@ -1,6 +1,6 @@
 # Privacy data inventory (Phase 11A.2.0 / M0)
 
-Documentation-only milestone. This inventory is grounded in the current `inboxly-backend` and `inboxly-frontend` repositories. It does **not** authorize storing synchronized Shopify customer PII.
+Documentation-only milestone. This inventory is grounded in the current `inboxly-backend` and `inboxly-frontend` repositories. Commerce sync may write Shopify customer name/email/phone onto Audience `Contact` rows when present.
 
 **Label key**
 
@@ -17,7 +17,7 @@ Documentation-only milestone. This inventory is grounded in the current `inboxly
 - Soft delete is **not** privacy erasure.
 - Shopify customer deletion ≠ Inboxly contact deletion and must not change Inboxly consent.
 - Linked Inboxly contact erasure after `customers/redact`, and post-redaction GID retention, remain **unresolved legal decisions**.
-- Customer PII synchronization must not begin until privacy/compliance gates are satisfied.
+- Customer name/email/phone may be written to Contacts during Shopify commerce sync; treat synced Contacts under the same retention and erasure rules as imported/manual contacts.
 
 ---
 

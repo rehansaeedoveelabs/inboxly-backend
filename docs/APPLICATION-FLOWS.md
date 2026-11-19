@@ -8,10 +8,11 @@ Step-by-step flows as implemented in this backend. Frontend steps describe the c
 **Code:** `RegisterController`, `Actions\RegisterUser`, `SessionController`, `ProfileController`
 
 1. Client obtains CSRF cookie: `GET /sanctum/csrf-cookie`.
-2. **Register:** validates via `RegisterRequest` → creates `User` + default `Workspace` (Admin membership + `UserWorkspaceContext`) in a transaction → fires `Registered` (verification email) → logs in on `web` guard → returns `UserResource` (201).
-3. **Login:** `Auth::guard('web')->attempt` → session regenerate → `UserResource`.
-4. **Me:** returns the authenticated user (includes workspaces for the SPA).
-5. **Logout:** logout, invalidate session, regenerate CSRF token (204).
+2. **Register (onboarding):** validates via `RegisterRequest` (`shop_name`, `phone`, name, email, password) → creates `User` + workspace + **pending** store (no myshopify domain yet) → issues **email OTP** → logs in → returns user + `meta.next=email_otp` (201).
+3. **Email OTP:** `POST /auth/email/otp/verify` marks email verified and returns `shopify_authorize_url` (`admin.shopify.com/oauth/install`). `GET /shopify/oauth/continue?shop=` binds the shop to OAuth state and returns the classic authorize URL. Callback connects the pending store, queues webhooks, redirects to the dashboard with `shopify=connected`.
+4. **Login:** `Auth::guard('web')->attempt` → session regenerate → `UserResource`. Unverified users continue OTP; unverified-connected stores resume Shopify install.
+5. **Me:** returns the authenticated user (includes workspaces for the SPA).
+6. **Logout:** logout, invalidate session, regenerate CSRF token (204).
 
 Password reset and email verification endpoints exist (`PasswordResetController`, `EmailVerificationController`). Verification is **not** required by middleware on API routes today.
 
@@ -68,7 +69,7 @@ Admin DELETE connection → best-effort remote revoke → clear local credential
 
 **Phase 11A.0:** `RegisterShopifyWebhooksJob` obtains tokens via `ShopifyCredentialService::ensureValidAccessToken`. Store API exposes `missing_shopify_scopes` / `requires_shopify_reauth` from granted scopes (never assumes requested scopes were approved).
 
-**Phase 11A.3 commerce sync:** `POST /stores/{store}/shopify/sync` starts a queued Admin GraphQL backfill (customers GID-only, products, orders). `GET .../shopify/sync` returns latest run + durable counts. Commerce webhooks and Contact materialization are still not implemented.
+**Phase 11A.3 commerce sync:** `POST /stores/{store}/shopify/sync` starts a queued Admin GraphQL backfill (customers, products, orders). Customer sync upserts Audience `Contact` rows (name/email/phone when Shopify provides them) and links `shopify_customer_identities`. `GET .../shopify/sync` returns latest run + durable counts. Commerce webhooks are still not implemented.
 
 ## 5. Contact management
 

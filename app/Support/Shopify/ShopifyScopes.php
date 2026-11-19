@@ -73,6 +73,50 @@ final class ShopifyScopes
     }
 
     /**
+     * Whether a granted scope list satisfies a required handle.
+     *
+     * Shopify: a write_* grant includes its matching read_* scope, and the
+     * token `scope` field may list only the write handle.
+     *
+     * @param  list<string>  $granted
+     */
+    public static function grantedSatisfies(string $required, array $granted): bool
+    {
+        $required = trim($required);
+        if ($required === '') {
+            return false;
+        }
+
+        $normalized = self::normalize($granted);
+        if (in_array($required, $normalized, true)) {
+            return true;
+        }
+
+        if (str_starts_with($required, 'read_')) {
+            $writeCounterpart = 'write_'.substr($required, strlen('read_'));
+
+            return in_array($writeCounterpart, $normalized, true);
+        }
+
+        return false;
+    }
+
+    /**
+     * Required scopes not covered by the granted list (write implies matching read).
+     *
+     * @param  list<string>  $required
+     * @param  list<string>  $granted
+     * @return list<string>
+     */
+    public static function missingFromGranted(array $required, array $granted): array
+    {
+        return array_values(array_filter(
+            self::normalize($required),
+            static fn (string $scope) => ! self::grantedSatisfies($scope, $granted),
+        ));
+    }
+
+    /**
      * Scopes safe to place on the Shopify authorize URL.
      * Rejects empty lists and any config that omits a required baseline scope.
      *
@@ -88,10 +132,7 @@ final class ShopifyScopes
             throw new InvalidArgumentException('Shopify OAuth scopes are not configured.');
         }
 
-        $missing = array_values(array_filter(
-            self::required(),
-            static fn (string $scope) => ! in_array($scope, $requested, true),
-        ));
+        $missing = self::missingFromGranted(self::required(), $requested);
 
         if ($missing !== []) {
             throw new InvalidArgumentException(

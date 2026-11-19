@@ -130,7 +130,7 @@ class EmailTemplateTest extends TestCase
         $campaignId = $this->spa()->actingAs($admin)->postJson("/api/v1/stores/{$store->id}/campaigns", [
             'name' => 'HTML campaign',
             'channel' => 'email',
-            'subject' => 'Hi',
+            'subject' => null,
             'body' => 'plain',
             'audience_type' => 'all_eligible',
         ])->assertCreated()->json('data.id');
@@ -140,11 +140,13 @@ class EmailTemplateTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('data.content_format', 'html')
             ->assertJsonPath('data.email_template_id', $template->id)
-            ->assertJsonPath('data.html_body', '<p>Promo body</p>');
+            ->assertJsonPath('data.html_body', '<p>Promo body</p>')
+            ->assertJsonPath('data.subject', 'Promo');
 
         $campaign = Campaign::query()->findOrFail($campaignId);
         $this->assertSame('html', $campaign->content_format->value);
         $this->assertNotEmpty($campaign->content_document);
+        $this->assertSame('Promo', $campaign->subject);
 
         $this->spa()->actingAs($admin)->putJson("/api/v1/campaigns/{$campaignId}", [
             'content_document' => $this->sampleDocument(),

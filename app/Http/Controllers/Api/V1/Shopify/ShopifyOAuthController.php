@@ -2,13 +2,16 @@
 
 namespace App\Http\Controllers\Api\V1\Shopify;
 
+use App\Actions\Shopify\ContinueShopifyInstallOAuth;
 use App\Actions\Shopify\HandleShopifyOAuthCallback;
+use App\Actions\Shopify\StartShopifyInstallOAuth;
 use App\Actions\Shopify\StartShopifyOAuth;
 use App\Exceptions\ShopifyOAuthException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Shopify\StartShopifyOAuthRequest;
 use App\Models\Store;
 use App\Support\FrontendUrl;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -27,6 +30,34 @@ class ShopifyOAuthController extends Controller
         $url = $startShopifyOAuth->handle($request->user(), $store);
 
         return redirect()->away($url);
+    }
+
+    /**
+     * Authenticated onboarding install: Shopify shop picker (no domain typed in Inboxly).
+     */
+    public function install(Request $request, StartShopifyInstallOAuth $startInstall): JsonResponse|RedirectResponse
+    {
+        $url = $startInstall->handle($request->user());
+
+        if ($request->expectsJson() || $request->boolean('json')) {
+            return response()->json([
+                'data' => ['authorize_url' => $url],
+            ]);
+        }
+
+        return redirect()->away($url);
+    }
+
+    /**
+     * After Shopify install redirects with shop, continue to authorize with CSRF state.
+     */
+    public function continueInstall(Request $request, ContinueShopifyInstallOAuth $continue): JsonResponse
+    {
+        $url = $continue->handle($request->user(), $request->query());
+
+        return response()->json([
+            'data' => ['authorize_url' => $url],
+        ]);
     }
 
     /**
@@ -61,10 +92,10 @@ class ShopifyOAuthController extends Controller
      *
      * @param  array<string, string>  $query
      */
-    private function redirectToFrontend(string $status, array $query = []): RedirectResponse
+    private function redirectToFrontend(string $status, array $query = [], string $path = '/settings/storefront'): RedirectResponse
     {
         $params = array_merge(['shopify' => $status], $query);
 
-        return redirect()->away(FrontendUrl::to('/settings/storefront', $params));
+        return redirect()->away(FrontendUrl::to($path, $params));
     }
 }

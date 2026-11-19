@@ -8,11 +8,14 @@ use App\Enums\ConsentChannel;
 use App\Enums\ConsentStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AutomationEnrollment;
+use App\Models\ConsentEvent;
 use App\Models\Contact;
 use App\Models\ContactConsent;
+use App\Models\FormSubmission;
 use App\Models\Store;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 
 /**
  * Store-scoped live metrics for dashboard / insights (no mock revenue).
@@ -96,6 +99,114 @@ class StoreInsightsController extends Controller
             'recent_campaigns' => $recentCampaigns,
             'recent_automations' => $recentAutomations,
         ]);
+    }
+
+    /**
+     * Recent audience activity (form submits, new contacts, consent changes).
+     */
+    public function activity(Store $store): JsonResponse
+    {
+        $this->authorize('manageAudience', $store);
+
+        $since = CarbonImmutable::now('UTC')->subDays(7);
+        $events = collect()
+            ->merge($this->formSubmitEvents($store, $since))
+            ->merge($this->contactCreatedEvents($store, $since))
+            ->merge($this->consentEvents($store, $since))
+            ->sortByDesc('at')
+            ->values()
+            ->take(50)
+            ->values();
+
+        return response()->json([
+            'data' => $events,
+            'meta' => [
+                'since' => $since->toIso8601String(),
+                'count' => $events->count(),
+            ],
+        ]);
+    }
+
+    /**
+     * @return Collection<int, array{id: string, type: string, contact: string, detail: string, at: string}>
+     */
+    private function formSubmitEvents(Store $store, CarbonImmutable $since): Collection
+    {
+        return FormSubmission::query()
+            ->with(['contact:id,email,phone,first_name,last_name', 'form:id,name'])
+            ->where('store_id', $store->getKey())
+            ->where('created_at', '>=', $since)
+            ->orderByDesc('created_at')
+            ->limit(40)
+            ->get()
+            ->map(fn (FormSubmission $row) => [
+                'id' => 'form_'.$row->getKey(),
+                'type' => 'form_submit',
+                'contact' => $this->contactLabel($row->contact),
+                'detail' => 'Submitted form “'.($row->form?->name ?? 'Untitled').'”',
+                'at' => optional($row->created_at)?->toIso8601String() ?? '',
+            ]);
+    }
+
+    /**
+     * @return Collection<int, array{id: string, type: string, contact: string, detail: string, at: string}>
+     */
+    private function contactCreatedEvents(Store $store, CarbonImmutable $since): Collection
+    {
+        return Contact::query()
+            ->where('store_id', $store->getKey())
+            ->where('created_at', '>=', $since)
+            ->orderByDesc('created_at')
+            ->limit(40)
+            ->get(['id', 'email', 'phone', 'first_name', 'last_name', 'source', 'created_at'])
+            ->map(fn (Contact $contact) => [
+                'id' => 'contact_'.$contact->getKey(),
+                'type' => 'contact_created',
+                'contact' => $this->contactLabel($contact),
+                'detail' => 'New contact'.($contact->source ? ' via '.$contact->source : ''),
+                'at' => optional($contact->created_at)?->toIso8601String() ?? '',
+            ]);
+    }
+
+    /**
+     * @return Collection<int, array{id: string, type: string, contact: string, detail: string, at: string}>
+     */
+    private function consentEvents(Store $store, CarbonImmutable $since): Collection
+    {
+        return ConsentEvent::query()
+            ->with(['contact:id,email,phone,first_name,last_name'])
+            ->where('created_at', '>=', $since)
+            ->whereHas('contact', fn ($q) => $q->where('store_id', $store->getKey()))
+            ->orderByDesc('created_at')
+            ->limit(40)
+            ->get()
+            ->map(function (ConsentEvent $event) {
+                $channel = $event->channel?->value ?? 'channel';
+                $status = $event->status?->value ?? 'updated';
+
+                return [
+                    'id' => 'consent_'.$event->getKey(),
+                    'type' => $status === ConsentStatus::Subscribed->value ? 'subscribed' : 'consent_change',
+                    'contact' => $this->contactLabel($event->contact),
+                    'detail' => strtoupper($channel).' → '.$status
+                        .($event->source ? ' ('.$event->source.')' : ''),
+                    'at' => optional($event->created_at)?->toIso8601String() ?? '',
+                ];
+            });
+    }
+
+    private function contactLabel(?Contact $contact): string
+    {
+        if ($contact === null) {
+            return 'Unknown contact';
+        }
+
+        $name = trim(($contact->first_name ?? '').' '.($contact->last_name ?? ''));
+        if ($name !== '') {
+            return $name;
+        }
+
+        return $contact->email ?: ($contact->phone ?: 'Contact');
     }
 
     /**

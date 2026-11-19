@@ -2,6 +2,8 @@
 
 namespace App\Actions\Shopify;
 
+use App\Actions\UpsertContact;
+use App\Enums\ShopifyCustomerIdentityLinkSource;
 use App\Enums\ShopifyCustomerIdentityStatus;
 use App\Enums\ShopifySyncResource;
 use App\Exceptions\ShopifyAdminGraphqlException;
@@ -19,7 +21,11 @@ use Carbon\Carbon;
  */
 class SyncShopifyCommerceResourcePage
 {
-    public function __construct(private readonly ShopifyAdminGraphqlClient $graphql) {}
+    public function __construct(
+        private readonly ShopifyAdminGraphqlClient $graphql,
+        private readonly UpsertContact $upsertContact,
+    ) {}
+
 
     /**
      * @return array{upserted: int, next_cursor: ?string, exhausted: bool}
@@ -132,26 +138,92 @@ class SyncShopifyCommerceResourcePage
             }
 
             $shopifyUpdatedAt = $this->parseTimestamp($node['updatedAt'] ?? null);
+            $email = $this->customerEmail($node);
+            $phone = $this->customerPhone($node);
+            $firstName = $this->nullableString($node['firstName'] ?? null);
+            $lastName = $this->nullableString($node['lastName'] ?? null);
 
-            ShopifyCustomerIdentity::query()->updateOrCreate(
-                [
-                    'store_id' => $store->getKey(),
-                    'shopify_customer_gid' => $gid,
-                ],
-                [
-                    // Never set contact_id / never store email/phone/name.
-                    'status' => ShopifyCustomerIdentityStatus::Tracked,
-                    'shopify_updated_at' => $shopifyUpdatedAt,
-                    'last_synced_at' => $now,
-                    'last_seen_at' => $now,
-                    'sync_error_code' => null,
-                    'shopify_deleted_at' => null,
-                ],
-            );
+            $contactId = null;
+            if ($email !== null || $phone !== null) {
+                $contact = $this->upsertContact->handle($store, array_filter([
+                    'email' => $email,
+                    'phone' => $phone,
+                    'first_name' => $firstName,
+                    'last_name' => $lastName,
+                    'source' => 'shopify',
+                ], static fn ($value) => $value !== null));
+                $contactId = $contact->getKey();
+            }
+
+            $identity = ShopifyCustomerIdentity::query()->firstOrNew([
+                'store_id' => $store->getKey(),
+                'shopify_customer_gid' => $gid,
+            ]);
+
+            // Avoid unique (store_id, contact_id) collisions when re-linking.
+            if ($contactId !== null) {
+                ShopifyCustomerIdentity::query()
+                    ->where('store_id', $store->getKey())
+                    ->where('contact_id', $contactId)
+                    ->where('shopify_customer_gid', '!=', $gid)
+                    ->update([
+                        'contact_id' => null,
+                        'status' => ShopifyCustomerIdentityStatus::Unlinked->value,
+                        'unlinked_at' => $now,
+                        'link_source' => null,
+                        'linked_at' => null,
+                    ]);
+            }
+
+            $identity->fill([
+                'status' => ShopifyCustomerIdentityStatus::Tracked,
+                'shopify_updated_at' => $shopifyUpdatedAt,
+                'last_synced_at' => $now,
+                'last_seen_at' => $now,
+                'sync_error_code' => null,
+                'shopify_deleted_at' => null,
+            ]);
+
+            if ($contactId !== null) {
+                $identity->contact_id = $contactId;
+                $identity->link_source = ShopifyCustomerIdentityLinkSource::ShopifySync;
+                $identity->linked_at = $identity->linked_at ?? $now;
+                $identity->unlinked_at = null;
+            }
+
+            $identity->save();
             $count++;
         }
 
         return $count;
+    }
+
+    /**
+     * @param  array<string, mixed>  $node
+     */
+    private function customerEmail(array $node): ?string
+    {
+        $default = is_array($node['defaultEmailAddress'] ?? null) ? $node['defaultEmailAddress'] : [];
+        $email = $this->nullableString($default['emailAddress'] ?? null);
+        if ($email !== null) {
+            return $email;
+        }
+
+        return $this->nullableString($node['email'] ?? null);
+    }
+
+    /**
+     * @param  array<string, mixed>  $node
+     */
+    private function customerPhone(array $node): ?string
+    {
+        $default = is_array($node['defaultPhoneNumber'] ?? null) ? $node['defaultPhoneNumber'] : [];
+        $phone = $this->nullableString($default['phoneNumber'] ?? null);
+        if ($phone !== null) {
+            return $phone;
+        }
+
+        return $this->nullableString($node['phone'] ?? null);
     }
 
     /**

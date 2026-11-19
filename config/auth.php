@@ -114,4 +114,13 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Email OTP (onboarding)
+    |--------------------------------------------------------------------------
+    */
+    'email_otp_ttl_minutes' => (int) env('AUTH_EMAIL_OTP_TTL_MINUTES', 10),
+    'email_otp_max_attempts' => (int) env('AUTH_EMAIL_OTP_MAX_ATTEMPTS', 5),
+
 ];
+
