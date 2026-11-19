@@ -216,11 +216,19 @@ class HandleShopifyOAuthCallback
                 throw new ShopifyOAuthException('OAuth state has expired.', 'state_expired');
             }
 
-            if ($oauthState->shop_domain !== $shopDomain) {
+            // Install onboarding may create state before the shop is known (null shop_domain).
+            if (
+                $oauthState->shop_domain !== null
+                && $oauthState->shop_domain !== ''
+                && $oauthState->shop_domain !== $shopDomain
+            ) {
                 throw new ShopifyOAuthException('OAuth state shop mismatch.', 'state_shop_mismatch');
             }
 
-            $oauthState->forceFill(['consumed_at' => now()])->save();
+            $oauthState->forceFill([
+                'shop_domain' => $shopDomain,
+                'consumed_at' => now(),
+            ])->save();
 
             return $oauthState;
         });

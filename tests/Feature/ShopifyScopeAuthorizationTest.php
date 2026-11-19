@@ -24,6 +24,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
 
         $this->assertSame([
             'read_customers',
+            'write_customers',
             'read_products',
             'read_orders',
             'read_all_orders',
@@ -47,7 +48,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         $this->assertNotNull($location);
         parse_str(parse_url($location, PHP_URL_QUERY) ?: '', $query);
         $this->assertSame(
-            'read_customers,read_products,read_orders,read_all_orders',
+            'read_customers,write_customers,read_products,read_orders,read_all_orders',
             $query['scope'] ?? null,
         );
     }
@@ -56,6 +57,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
     {
         $required = [
             'read_customers',
+            'write_customers',
             'read_products',
             'read_orders',
             'read_all_orders',
@@ -124,6 +126,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         config([
             'services.shopify.scopes' => [
                 'read_customers',
+                'write_customers',
                 'read_products',
                 'read_orders',
                 'read_all_orders',
@@ -138,7 +141,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         $this->assertNotNull($location);
         parse_str(parse_url($location, PHP_URL_QUERY) ?: '', $query);
         $this->assertSame(
-            'read_customers,read_products,read_orders,read_all_orders,read_locations',
+            'read_customers,write_customers,read_products,read_orders,read_all_orders,read_locations',
             $query['scope'] ?? null,
         );
     }
@@ -215,8 +218,8 @@ class ShopifyScopeAuthorizationTest extends TestCase
 
         $fresh = $store->fresh();
         $this->assertSame(['read_customers', 'read_products'], $fresh->shopify_scopes);
-        $this->assertSame(
-            ['read_orders', 'read_all_orders'],
+        $this->assertEqualsCanonicalizing(
+            ['write_customers', 'read_orders', 'read_all_orders'],
             $fresh->missingShopifyScopes(),
         );
         $this->assertTrue($fresh->requiresShopifyReauth());
@@ -235,6 +238,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         $this->assertTrue($store->isConnected());
         $this->assertTrue($store->requiresShopifyReauth());
         $this->assertContains('read_customers', $store->missingShopifyScopes());
+        $this->assertContains('write_customers', $store->missingShopifyScopes());
         $this->assertContains('read_orders', $store->missingShopifyScopes());
         $this->assertContains('read_all_orders', $store->missingShopifyScopes());
 
@@ -247,7 +251,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         $this->assertTrue($payload['requires_shopify_reauth']);
         $this->assertSame(['read_products'], $payload['shopify_scopes']);
         $this->assertEqualsCanonicalizing(
-            ['read_customers', 'read_orders', 'read_all_orders'],
+            ['read_customers', 'write_customers', 'read_orders', 'read_all_orders'],
             $payload['missing_shopify_scopes'],
         );
         $this->assertArrayNotHasKey('shopify_access_token', $payload);
@@ -354,7 +358,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
                 'refresh_token' => 'shprt_rotated_token',
                 'expires_in' => 3600,
                 'refresh_token_expires_in' => 7776000,
-                'scope' => 'read_customers,read_products,read_orders,read_all_orders',
+                'scope' => 'read_customers,write_customers,read_products,read_orders,read_all_orders',
             ], 200),
             'https://refresh-hooks.myshopify.com/admin/api/2026-10/graphql.json' => function ($request) use ($webhookUri) {
                 static $n = 0;
@@ -410,6 +414,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         $store = Store::factory()->withShopifyCredentials('complete-shop.myshopify.com')->create([
             'shopify_scopes' => [
                 'read_customers',
+                'write_customers',
                 'read_products',
                 'read_orders',
                 'read_all_orders',

@@ -125,7 +125,9 @@ Flow summary:
 
 **Phase 11A.3 / commerce sync thin slice:** Admin GraphQL backfill via `ShopifyAdminGraphqlClient` + `RunShopifyCommerceSyncJob`. Customers upsert **GIDs only** into `shopify_customer_identities` (no Contact upsert, no email/phone). Products → `shopify_products`; orders → `shopify_orders` (customer GID only, no address/email). Runs tracked in `shopify_sync_runs`. HTTP: `POST/GET /api/v1/stores/{store}/shopify/sync`; `StoreResource.shopify_sync` summary. **Not in this slice:** commerce webhooks, Contact materialization, Admin link/conflict UI.
 
-**Not implemented:** commerce create/update/delete webhooks; Contact upsert from Shopify; conflict/link Admin workflows; Partner/TOML compliance subscription activation; external backup erasure. Production Contact PII sync remains gated on privacy/compliance readiness.
+**Onboarding auto-connect:** Register creates pending store (shop name only) + email OTP; verify returns Shopify install URL; `/shopify/oauth/continue` binds shop; callback connects store + webhooks; merchant lands on dashboard connected without typing a myshopify domain.
+
+**Not implemented:** commerce create/update/delete webhooks; conflict/link Admin workflows; Partner/TOML compliance subscription activation; external backup erasure. Customer sync materializes Contacts (email/phone/name) and links identities with `link_source=shopify_sync`.
 
 ## Queue and schedule architecture
 

@@ -18,8 +18,12 @@ class RegisterController extends Controller
         Auth::guard('web')->login($user);
         $request->session()->regenerate();
 
-        return (new UserResource($user->load('workspaces', 'workspaceContexts')))
-            ->response()
-            ->setStatusCode(201);
+        return response()->json([
+            'data' => (new UserResource($user->load('workspaces', 'workspaceContexts')))->resolve(),
+            'meta' => [
+                'email_otp_required' => ! $user->hasVerifiedEmail(),
+                'next' => 'email_otp',
+            ],
+        ], 201);
     }
 }

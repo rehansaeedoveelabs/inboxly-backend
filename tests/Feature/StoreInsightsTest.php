@@ -53,4 +53,19 @@ class StoreInsightsTest extends TestCase
             ->getJson("/api/v1/stores/{$store->id}/insights/overview")
             ->assertForbidden();
     }
+
+    public function test_activity_returns_recent_contact_events(): void
+    {
+        [$admin, $workspace] = $this->adminWithWorkspace();
+        $store = $this->storeIn($workspace);
+        $this->contactIn($store, ['email' => 'new@example.com', 'source' => 'manual']);
+
+        $response = $this->spa()->actingAs($admin)
+            ->getJson("/api/v1/stores/{$store->id}/insights/activity")
+            ->assertOk();
+
+        $this->assertIsArray($response->json('data'));
+        $this->assertGreaterThanOrEqual(1, count($response->json('data')));
+        $this->assertSame('contact_created', $response->json('data.0.type'));
+    }
 }

@@ -212,6 +212,16 @@ class Store extends Model
         return $this->hasMany(EmailTemplate::class);
     }
 
+    public function smsTemplates(): HasMany
+    {
+        return $this->hasMany(SmsTemplate::class);
+    }
+
+    public function forms(): HasMany
+    {
+        return $this->hasMany(Form::class);
+    }
+
     public function suppressions(): HasMany
     {
         return $this->hasMany(Suppression::class);
@@ -246,7 +256,10 @@ class Store extends Model
 
     public function hasShopifyScope(string $scope): bool
     {
-        return in_array($scope, $this->grantedShopifyScopes(), true);
+        return \App\Support\Shopify\ShopifyScopes::grantedSatisfies(
+            $scope,
+            $this->grantedShopifyScopes(),
+        );
     }
 
     /**
@@ -275,12 +288,10 @@ class Store extends Model
      */
     public function missingShopifyScopes(): array
     {
-        $granted = $this->grantedShopifyScopes();
-
-        return array_values(array_filter(
+        return \App\Support\Shopify\ShopifyScopes::missingFromGranted(
             $this->requiredShopifyScopes(),
-            static fn (string $scope) => ! in_array($scope, $granted, true),
-        ));
+            $this->grantedShopifyScopes(),
+        );
     }
 
     /**

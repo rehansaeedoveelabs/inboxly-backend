@@ -118,7 +118,9 @@ class EmailTemplateController extends Controller
         }
 
         $html = app(EmailDocumentRenderer::class)
-            ->render($store, $data['document']);
+            ->render($store, $data['document'], null, [
+                'show_empty_image_placeholders' => true,
+            ]);
 
         return response()->json(['html' => $html]);
     }

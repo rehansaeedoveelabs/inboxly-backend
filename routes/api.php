@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AssetController;
 use App\Http\Controllers\Api\V1\AutomationController;
+use App\Http\Controllers\Api\V1\Auth\EmailOtpController;
 use App\Http\Controllers\Api\V1\Auth\EmailVerificationController;
 use App\Http\Controllers\Api\V1\Auth\PasswordResetController;
 use App\Http\Controllers\Api\V1\Auth\ProfileController;
@@ -15,6 +16,11 @@ use App\Http\Controllers\Api\V1\ContactExportController;
 use App\Http\Controllers\Api\V1\ContactImportController;
 use App\Http\Controllers\Api\V1\ContactTagController;
 use App\Http\Controllers\Api\V1\EmailTemplateController;
+use App\Http\Controllers\Api\V1\FormController;
+use App\Http\Controllers\Api\V1\SmsTemplateController;
+use App\Http\Controllers\Api\V1\PublicFormController;
+use App\Http\Controllers\Api\V1\StoreBrandController;
+use App\Http\Controllers\Api\V1\StoreChannelsController;
 use App\Http\Controllers\Api\V1\Meta\CampaignMetaPublicationController;
 use App\Http\Controllers\Api\V1\Meta\MetaConnectionController;
 use App\Http\Controllers\Api\V1\Meta\MetaOAuthController;
@@ -62,6 +68,12 @@ Route::prefix('auth')->group(function () {
         Route::put('password', [ProfileController::class, 'updatePassword']);
         Route::post('email/verification-notification', [EmailVerificationController::class, 'send'])
             ->middleware('throttle:6,1');
+        Route::post('email/otp/send', [EmailOtpController::class, 'send'])
+            ->middleware('throttle:6,1')
+            ->name('auth.email.otp.send');
+        Route::post('email/otp/verify', [EmailOtpController::class, 'verify'])
+            ->middleware('throttle:12,1')
+            ->name('auth.email.otp.verify');
     });
 });
 
@@ -99,6 +111,17 @@ Route::post('brevo/webhooks', BrevoWebhookController::class)
     ->middleware('throttle:brevo-webhooks')
     ->name('brevo.webhooks');
 
+/*
+| Public forms — embed HTML + JSON show/submit (token-gated, no auth).
+| Full paths: /api/v1/public/forms/{token}[…]
+*/
+Route::prefix('public/forms')->middleware('throttle:60,1')->group(function () {
+    Route::get('{token}', [PublicFormController::class, 'show']);
+    Route::get('{token}/embed', [PublicFormController::class, 'embed']);
+    Route::post('{token}/submissions', [PublicFormController::class, 'submit'])
+        ->middleware('throttle:30,1');
+});
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('workspaces', [WorkspaceController::class, 'index']);
     Route::post('workspaces', [WorkspaceController::class, 'store']);
@@ -114,6 +137,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('stores/{store}/shopify/oauth/start', [ShopifyOAuthController::class, 'start'])
         ->middleware('throttle:10,1')
         ->name('shopify.oauth.start');
+
+    Route::get('shopify/oauth/install', [ShopifyOAuthController::class, 'install'])
+        ->middleware('throttle:10,1')
+        ->name('shopify.oauth.install');
+    Route::get('shopify/oauth/continue', [ShopifyOAuthController::class, 'continueInstall'])
+        ->middleware('throttle:20,1')
+        ->name('shopify.oauth.continue');
 
     Route::delete('stores/{store}/shopify/connection', [ShopifyConnectionController::class, 'destroy'])
         ->middleware('throttle:10,1')
@@ -187,6 +217,11 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('throttle:contact-exports');
 
     Route::get('stores/{store}/insights/overview', [StoreInsightsController::class, 'overview']);
+    Route::get('stores/{store}/insights/activity', [StoreInsightsController::class, 'activity']);
+    Route::get('stores/{store}/brand', [StoreBrandController::class, 'show']);
+    Route::put('stores/{store}/brand', [StoreBrandController::class, 'update']);
+    Route::get('stores/{store}/channels', [StoreChannelsController::class, 'show']);
+    Route::put('stores/{store}/channels', [StoreChannelsController::class, 'update']);
     Route::get('stores/{store}/campaigns/summary', [CampaignController::class, 'summary']);
     Route::post('stores/{store}/campaigns/audience-preview', [CampaignController::class, 'audiencePreview']);
     Route::get('stores/{store}/campaigns', [CampaignController::class, 'index']);
@@ -245,4 +280,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('email-templates/{emailTemplate}', [EmailTemplateController::class, 'update']);
     Route::delete('email-templates/{emailTemplate}', [EmailTemplateController::class, 'destroy']);
     Route::post('email-templates/{emailTemplate}/duplicate', [EmailTemplateController::class, 'duplicate']);
+
+    Route::get('stores/{store}/sms-templates', [SmsTemplateController::class, 'index']);
+    Route::post('stores/{store}/sms-templates', [SmsTemplateController::class, 'store']);
+    Route::get('sms-templates/{smsTemplate}', [SmsTemplateController::class, 'show']);
+    Route::put('sms-templates/{smsTemplate}', [SmsTemplateController::class, 'update']);
+    Route::delete('sms-templates/{smsTemplate}', [SmsTemplateController::class, 'destroy']);
+    Route::post('sms-templates/{smsTemplate}/duplicate', [SmsTemplateController::class, 'duplicate']);
+
+    Route::get('stores/{store}/forms', [FormController::class, 'index']);
+    Route::get('stores/{store}/forms/summary', [FormController::class, 'summary']);
+    Route::post('stores/{store}/forms', [FormController::class, 'store']);
+    Route::get('forms/{form}', [FormController::class, 'show']);
+    Route::put('forms/{form}', [FormController::class, 'update']);
+    Route::delete('forms/{form}', [FormController::class, 'destroy']);
 });

@@ -4,8 +4,10 @@ namespace Tests\Feature\Auth;
 
 use App\Actions\CreateWorkspace;
 use App\Enums\WorkspaceRole;
+use App\Models\Store;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Notifications\EmailOtpNotification;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
@@ -20,6 +22,8 @@ class AuthenticationTest extends TestCase
         return array_merge([
             'name' => 'Jane Doe',
             'email' => 'jane@example.com',
+            'phone' => '+15555550123',
+            'shop_name' => 'Jane Shop',
             'password' => 'secret-pass-1',
             'password_confirmation' => 'secret-pass-1',
         ], $overrides);
@@ -33,8 +37,10 @@ class AuthenticationTest extends TestCase
 
         $response->assertCreated()
             ->assertJsonPath('data.email', 'jane@example.com')
+            ->assertJsonPath('data.phone', '+15555550123')
             ->assertJsonPath('data.email_verified', false)
             ->assertJsonPath('data.workspaces.0.role', 'admin')
+            ->assertJsonPath('meta.email_otp_required', true)
             ->assertJsonMissingPath('data.password');
 
         $user = User::firstWhere('email', 'jane@example.com');
@@ -43,18 +49,25 @@ class AuthenticationTest extends TestCase
 
         $workspace = Workspace::firstOrFail();
         $this->assertSame($user->id, $workspace->owner_id);
+        $this->assertSame('Jane Shop', $workspace->name);
         $this->assertSame(WorkspaceRole::Admin, $workspace->roleFor($user));
+
+        $store = Store::query()->where('workspace_id', $workspace->id)->firstOrFail();
+        $this->assertSame('Jane Shop', $store->name);
+        $this->assertNull($store->domain);
         $this->assertDatabaseHas('user_workspace_contexts', [
             'user_id' => $user->id,
             'workspace_id' => $workspace->id,
-            'active_store_id' => null,
+            'active_store_id' => $store->id,
         ]);
 
-        Notification::assertSentTo($user, VerifyEmail::class);
+        Notification::assertSentTo($user, EmailOtpNotification::class);
     }
 
     public function test_registration_accepts_custom_workspace_name(): void
     {
+        Notification::fake();
+
         $this->spa()->postJson('/api/v1/auth/register', $this->payload(['workspace_name' => 'Brand Co']))
             ->assertCreated();
 

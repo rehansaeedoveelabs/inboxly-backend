@@ -32,6 +32,21 @@ class UpsertContact
         return DB::transaction(function () use ($store, $data, $email, $phone) {
             $contact = $this->find($store, $email, $phone);
 
+            // Drop phone when another contact already owns it so sync/import
+            // never fails the unique (store_id, phone) constraint.
+            if ($phone !== null) {
+                $phoneOwner = Contact::withTrashed()
+                    ->where('store_id', $store->getKey())
+                    ->where('phone', $phone)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($phoneOwner !== null && ($contact === null || $phoneOwner->getKey() !== $contact->getKey())) {
+                    $phone = null;
+                    unset($data['phone']);
+                }
+            }
+
             $attributes = array_filter(
                 array_intersect_key($data, array_flip(self::FIELDS)),
                 fn ($value) => $value !== null,

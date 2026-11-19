@@ -29,7 +29,7 @@ Honest inventory of what this backend implements versus what is incomplete or on
 | Member management | No remove member / change role / revoke invite HTTP APIs |
 | Store update/delete HTTP | Soft-delete hooks exist; no public update/destroy routes |
 | Workspace delete | Soft deletes on model; no destroy route |
-| Email verification enforcement | `MustVerifyEmail` present; routes lack `verified` middleware |
+| Email verification enforcement | Onboarding uses email OTP before Shopify install; signed-link routes remain; not all API routes require `verified` |
 | Shopify token refresh wiring | `ShopifyCredentialService` refreshes for webhook registration and credential helpers; all future Admin customer APIs must use it |
 | Shopify privacy compliance | M1 handlers/Admin APIs/lease recovery/ops report in code; Partner/TOML subscription + staging activation **not** done; external alerting still required; see [PRIVACY-DATA-INVENTORY.md](PRIVACY-DATA-INVENTORY.md) and [M1-COMPLIANCE-OPERATIONS.md](M1-COMPLIANCE-OPERATIONS.md) |
 | Import file upload | Inline JSON rows only (≤1000); PII held in `options.rows` until success (cleared on success; retained on failure) |
@@ -46,26 +46,29 @@ Honest inventory of what this backend implements versus what is incomplete or on
 | Contact exports API | **Stub** page (“coming later”) |
 | Invitation create API | No members/invites UI; accept route missing on both sides |
 | Password reset / email verified redirects | Backend redirects; SPA routes missing |
-| Profile/password APIs | Account settings page is mock/local |
+| Profile/password APIs | **Wired** — Account settings uses profile/password + workspace members |
 | Import list API | SPA uses `sessionStorage` history |
 
 ## Mock / stub on frontend (not backend features)
 
-Forms, analytics/live, image library, brand assets, channel settings, and most of dashboard metrics are **UI mocks** in `inboxly-frontend`. They must not be documented as live product capabilities.
+Revenue/open-rate charts are not available (no attribution pipeline yet).
 
-**Not mock:** Campaigns (email) and Welcome Automation are wired to this backend in `inboxly-frontend` (`campaignsApi.js`, `automationsApi.js`). Local/dev email delivery uses the **fake** mail driver unless SMTP is configured.
+**Wired:** Forms (CRUD + public embed/submit + template gallery + Omnisend-style studio), image library, brand assets (`stores/{store}/brand`), channel settings (`stores/{store}/channels`), Analytics + Live activity, Account settings, Dashboard metrics. Campaigns (email/SMS) and Welcome Automation use `campaignsApi.js` / `automationsApi.js`. Local/dev messaging defaults to fake drivers unless Brevo/Vonage are enabled.
 
 ## Deferred automation / marketing features (partially shipped)
 
 - Visual automation canvas / graph editor — **still deferred**
 - Simple linear condition branch (`condition` step) + `contact.tag_added` trigger — **shipped** (thin slice; not a canvas)
 - SMS campaign send via `MESSAGING_SMS_DRIVER=fake` — **shipped** locally; real Vonage via `MESSAGING_SMS_DRIVER=vonage` + `VONAGE_SMS_SENDING_ENABLED=true`
-- Live store insights overview (`GET .../insights/overview`) + dashboard wiring — **shipped** (no revenue analytics yet)
+- Live store insights overview + activity (`GET .../insights/overview|activity`) — **shipped** (no revenue analytics yet)
+- Public forms (`/api/v1/public/forms/{token}`) → contact upsert + consent — **shipped**
+- Brand assets on `store.metadata.brand` — **shipped**
+- Shopify contact write-back on Inboxly contact edit (`write_customers` + linked identity) — **shipped**
 - Real Brevo delivery — available via env (`MESSAGING_EMAIL_DRIVER=brevo` + `BREVO_SENDING_ENABLED=true`); defaults remain fake
 
 ## Planned / not present in backend code
 
-- Shopify customer identity schema (M2) + GID-only commerce sync backfill (11A.3) exist; conflict/link Admin workflows, Contact materialization, and Customer Events / commerce webhooks remain unimplemented
+- Shopify customer identity schema (M2) + commerce sync backfill (11A.3) exist and materialize Contacts from Shopify customers; conflict/link Admin workflows and Customer Events / commerce webhooks remain unimplemented (write-back updates already-linked customers only)
 - Staging/production activation of Shopify compliance webhook subscriptions (M1 code exists; activation gated)
 - Non-Shopify store platforms (`StorePlatform` is Shopify-only)
 - Required Redis/Horizon

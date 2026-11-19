@@ -2,6 +2,7 @@
 
 $shopifyRequiredScopes = [
     'read_customers',
+    'write_customers',
     'read_products',
     'read_orders',
     'read_all_orders',

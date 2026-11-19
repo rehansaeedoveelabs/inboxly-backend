@@ -25,13 +25,14 @@ class ShopifyConfigTest extends TestCase
         $this->assertIsArray($scopes);
         $this->assertSame([
             'read_customers',
+            'write_customers',
             'read_products',
             'read_orders',
             'read_all_orders',
         ], $required);
         $this->assertSame($required, $scopes);
+        $this->assertContains('write_customers', $scopes);
         $this->assertEmpty(array_intersect($scopes, [
-            'write_customers',
             'write_orders',
             'write_products',
         ]));

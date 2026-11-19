@@ -10,6 +10,7 @@ use App\Http\Requests\Audience\CreateContactRequest;
 use App\Http\Requests\Audience\ListContactsRequest;
 use App\Http\Requests\Audience\UpdateContactRequest;
 use App\Http\Resources\ContactResource;
+use App\Jobs\PushContactToShopifyJob;
 use App\Models\Contact;
 use App\Models\Store;
 use App\Support\Audience\ContactListQuery;
@@ -79,9 +80,10 @@ class ContactController extends Controller
 
     public function update(UpdateContactRequest $request, Contact $contact, UpdateContact $updateContact): ContactResource
     {
-        return new ContactResource(
-            $updateContact->handle($contact, $request->validated())->load(['tags', 'consents'])
-        );
+        $updated = $updateContact->handle($contact, $request->validated());
+        PushContactToShopifyJob::dispatch($updated->getKey());
+
+        return new ContactResource($updated->load(['tags', 'consents']));
     }
 
     public function destroy(Contact $contact): Response

@@ -3,8 +3,8 @@
 namespace App\Support\Shopify;
 
 /**
- * Admin GraphQL documents for commerce sync thin slice.
- * Customers intentionally request id + updatedAt only (no PII fields).
+ * Admin GraphQL documents for commerce sync.
+ * Customers include marketing identity fields so Audience contacts can be listed.
  */
 final class ShopifyCommerceGraphqlQueries
 {
@@ -15,6 +15,14 @@ final class ShopifyCommerceGraphqlQueries
           node {
             id
             updatedAt
+            firstName
+            lastName
+            defaultEmailAddress {
+              emailAddress
+            }
+            defaultPhoneNumber {
+              phoneNumber
+            }
           }
         }
         pageInfo {

@@ -14,9 +14,15 @@ class EmailDocumentRenderer
 
     /**
      * @param  array<string, mixed>  $document
+     * @param  array{show_empty_image_placeholders?: bool}|null  $options
      */
-    public function render(Store $store, array $document, ?string $assetUrlResolver = null): string
-    {
+    public function render(
+        Store $store,
+        array $document,
+        ?string $assetUrlResolver = null,
+        ?array $options = null,
+    ): string {
+        $showEmptyImagePlaceholders = (bool) ($options['show_empty_image_placeholders'] ?? false);
         $settings = is_array($document['settings'] ?? null) ? $document['settings'] : [];
         $width = isset($settings['width']) && is_int($settings['width']) ? $settings['width'] : 600;
         $background = is_string($settings['background'] ?? null) ? $settings['background'] : '#ffffff';
@@ -27,7 +33,7 @@ class EmailDocumentRenderer
             if (! is_array($block)) {
                 continue;
             }
-            $html = $this->renderBlock($store, $block, $assetUrlResolver);
+            $html = $this->renderBlock($store, $block, $assetUrlResolver, $showEmptyImagePlaceholders);
             if ($html !== '') {
                 $parts[] = $html;
             }
@@ -46,14 +52,22 @@ class EmailDocumentRenderer
     /**
      * @param  array<string, mixed>  $block
      */
-    private function renderBlock(Store $store, array $block, ?string $assetUrlResolver): string
-    {
+    private function renderBlock(
+        Store $store,
+        array $block,
+        ?string $assetUrlResolver,
+        bool $showEmptyImagePlaceholders = false,
+    ): string {
         $type = is_string($block['type'] ?? null) ? $block['type'] : '';
         $props = is_array($block['props'] ?? null) ? $block['props'] : [];
 
         return match ($type) {
-            'text', 'header', 'footer' => $this->renderText($props, $type === 'header' ? '24px' : ($type === 'footer' ? '12px' : '16px')),
-            'image' => $this->renderImage($store, $props, $assetUrlResolver),
+            'text', 'header', 'footer' => $this->renderText(
+                $props,
+                $type === 'header' ? '24px' : ($type === 'footer' ? '12px' : '16px'),
+                $type,
+            ),
+            'image' => $this->renderImage($store, $props, $assetUrlResolver, $showEmptyImagePlaceholders),
             'button' => $this->renderButton($props),
             'divider' => '<tr><td style="padding:16px;"><hr style="border:none;border-top:1px solid #dddddd;"></td></tr>',
             'spacer' => $this->renderSpacer($props),
@@ -64,12 +78,16 @@ class EmailDocumentRenderer
     /**
      * @param  array<string, mixed>  $props
      */
-    private function renderText(array $props, string $fontSize): string
+    private function renderText(array $props, string $fontSize, string $type = 'text'): string
     {
         $html = $this->sanitizer->sanitize(is_string($props['html'] ?? null) ? $props['html'] : '');
         $align = in_array($props['align'] ?? 'left', ['left', 'center', 'right'], true) ? $props['align'] : 'left';
 
-        return '<tr><td style="padding:12px 24px;font-family:Arial,sans-serif;font-size:'.$fontSize.';line-height:1.5;color:#222222;text-align:'.$align.';">'
+        // Header banners often include their own full-bleed padding/background —
+        // skip outer cell padding so preview cards are not clipped.
+        $padding = $type === 'header' ? '0' : '12px 24px';
+
+        return '<tr><td style="padding:'.$padding.';font-family:Arial,sans-serif;font-size:'.$fontSize.';line-height:1.5;color:#222222;text-align:'.$align.';">'
             .$html
             .'</td></tr>';
     }
@@ -77,14 +95,18 @@ class EmailDocumentRenderer
     /**
      * @param  array<string, mixed>  $props
      */
-    private function renderImage(Store $store, array $props, ?string $assetUrlResolver): string
-    {
+    private function renderImage(
+        Store $store,
+        array $props,
+        ?string $assetUrlResolver,
+        bool $showEmptyPlaceholders = false,
+    ): string {
         $assetId = is_string($props['asset_id'] ?? null) ? $props['asset_id'] : null;
         $alt = is_string($props['alt'] ?? null) ? $props['alt'] : '';
         $href = $this->sanitizer->sanitizeUrl(is_string($props['href'] ?? null) ? $props['href'] : null);
 
         if ($assetId === null || $assetId === '') {
-            return '';
+            return $showEmptyPlaceholders ? $this->emptyImagePlaceholder() : '';
         }
 
         $asset = Asset::query()
@@ -93,7 +115,7 @@ class EmailDocumentRenderer
             ->first();
 
         if ($asset === null) {
-            return '';
+            return $showEmptyPlaceholders ? $this->emptyImagePlaceholder('Image missing from library') : '';
         }
 
         $src = $assetUrlResolver
@@ -140,5 +162,19 @@ class EmailDocumentRenderer
         $height = max(8, min(120, $height));
 
         return '<tr><td style="height:'.$height.'px;line-height:'.$height.'px;font-size:1px;">&nbsp;</td></tr>';
+    }
+
+    /**
+     * Studio-only marker so empty image blocks are visible in preview.
+     * Never used for persisted campaign HTML (preview endpoint only).
+     */
+    private function emptyImagePlaceholder(string $label = 'Choose an image for this block'): string
+    {
+        return '<tr><td style="padding:16px 24px;" align="center">'
+            .'<div style="border:2px dashed #94a3b8;border-radius:12px;background:#f8fafc;color:#64748b;'
+            .'font-family:Arial,sans-serif;font-size:14px;line-height:1.4;padding:36px 20px;text-align:center;">'
+            .e($label)
+            .'<div style="margin-top:6px;font-size:12px;color:#94a3b8;">Click a library thumbnail or drop a file in Image settings</div>'
+            .'</div></td></tr>';
     }
 }

@@ -34,6 +34,25 @@ class ApplyEmailTemplateToCampaign
         }
 
         $document = $template->document ?? ['version' => 1, 'blocks' => []];
+        $settings = is_array($document['settings'] ?? null) ? $document['settings'] : [];
+
+        // Inbox subject is required to schedule/send. Prefer template studio subject,
+        // then template name, when the campaign subject is still empty.
+        $subject = is_string($campaign->subject) ? trim($campaign->subject) : '';
+        if ($subject === '') {
+            $fromSettings = is_string($settings['subject'] ?? null) ? trim($settings['subject']) : '';
+            $subject = $fromSettings !== ''
+                ? $fromSettings
+                : (is_string($template->name) ? trim($template->name) : '');
+        }
+
+        $previewText = is_string($campaign->preview_text) ? trim($campaign->preview_text) : '';
+        if ($previewText === '') {
+            $fromPreheader = is_string($settings['preheader'] ?? null) ? trim($settings['preheader']) : '';
+            if ($fromPreheader !== '') {
+                $previewText = $fromPreheader;
+            }
+        }
 
         $campaign->forceFill([
             'email_template_id' => $template->getKey(),
@@ -41,6 +60,8 @@ class ApplyEmailTemplateToCampaign
             'content_document' => $document,
             'html_body' => $template->html,
             'body' => $this->plainTextFallback($template->html),
+            'subject' => $subject !== '' ? $subject : $campaign->subject,
+            'preview_text' => $previewText !== '' ? $previewText : $campaign->preview_text,
         ])->save();
 
         return $campaign->refresh();
