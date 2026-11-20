@@ -65,6 +65,8 @@ class ProcessBrevoWebhookEvent
 
         match ($event) {
             'delivered' => $this->applyDelivered($recipient),
+            'opened' => $this->applyOpened($recipient),
+            'clicked' => $this->applyClicked($recipient),
             'hard_bounce', 'blocked', 'invalid' => $this->applyHardFailure(
                 $recipient,
                 $email,
@@ -98,6 +100,15 @@ class ProcessBrevoWebhookEvent
 
         $map = [
             'delivered' => 'delivered',
+            'opened' => 'opened',
+            'unique_opened' => 'opened',
+            'uniqueopened' => 'opened',
+            'proxy_open' => 'opened',
+            'proxyopen' => 'opened',
+            'click' => 'clicked',
+            'clicked' => 'clicked',
+            'unique_click' => 'clicked',
+            'uniqueclick' => 'clicked',
             'hard_bounce' => 'hard_bounce',
             'hardbounce' => 'hard_bounce',
             'soft_bounce' => 'soft_bounce',
@@ -150,6 +161,49 @@ class ProcessBrevoWebhookEvent
         if ($recipient === null) {
             return;
         }
+    }
+
+    /**
+     * Record an open without changing delivery status (sent/bounced/etc stay put).
+     */
+    private function applyOpened(?CampaignRecipient $recipient): void
+    {
+        if ($recipient === null) {
+            return;
+        }
+
+        $updates = [
+            'open_count' => ((int) $recipient->open_count) + 1,
+        ];
+        if ($recipient->opened_at === null) {
+            $updates['opened_at'] = now();
+        }
+        $recipient->forceFill($updates)->save();
+    }
+
+    /**
+     * Record a click without changing delivery status.
+     */
+    private function applyClicked(?CampaignRecipient $recipient): void
+    {
+        if ($recipient === null) {
+            return;
+        }
+
+        $updates = [
+            'click_count' => ((int) $recipient->click_count) + 1,
+        ];
+        if ($recipient->clicked_at === null) {
+            $updates['clicked_at'] = now();
+        }
+        // A click implies an open for rate math when the open pixel was blocked.
+        if ($recipient->opened_at === null) {
+            $updates['opened_at'] = now();
+            if ((int) $recipient->open_count === 0) {
+                $updates['open_count'] = 1;
+            }
+        }
+        $recipient->forceFill($updates)->save();
     }
 
     private function applyHardFailure(

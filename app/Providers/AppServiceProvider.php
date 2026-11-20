@@ -2,8 +2,10 @@
 
 namespace App\Providers;
 
+use App\Events\CheckoutAbandoned;
 use App\Events\ContactEmailSubscribed;
 use App\Events\ContactTagAdded;
+use App\Listeners\EnrollContactOnCheckoutAbandoned;
 use App\Listeners\EnrollContactOnTagAdded;
 use App\Listeners\EnrollContactOnEmailSubscribed;
 use App\Support\Messaging\BrevoEmailSender;
@@ -63,6 +65,7 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(ContactEmailSubscribed::class, EnrollContactOnEmailSubscribed::class);
         Event::listen(ContactTagAdded::class, EnrollContactOnTagAdded::class);
+        Event::listen(CheckoutAbandoned::class, EnrollContactOnCheckoutAbandoned::class);
 
         // M1 compliance: warn on unsafe lease/queue/pcntl posture (does not read worker CLI flags).
         ShopifyComplianceRuntimeGuard::evaluate(log: true);

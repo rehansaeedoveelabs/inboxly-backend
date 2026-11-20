@@ -28,6 +28,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
             'read_products',
             'read_orders',
             'read_all_orders',
+            'read_checkouts',
         ], $required);
         $this->assertSame($required, $scopes);
     }
@@ -48,7 +49,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         $this->assertNotNull($location);
         parse_str(parse_url($location, PHP_URL_QUERY) ?: '', $query);
         $this->assertSame(
-            'read_customers,write_customers,read_products,read_orders,read_all_orders',
+            'read_customers,write_customers,read_products,read_orders,read_all_orders,read_checkouts',
             $query['scope'] ?? null,
         );
     }
@@ -61,6 +62,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
             'read_products',
             'read_orders',
             'read_all_orders',
+            'read_checkouts',
         ];
 
         // Mirror config/services.php: env(SHOPIFY_SCOPES) null → required baseline.
@@ -130,6 +132,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
                 'read_products',
                 'read_orders',
                 'read_all_orders',
+                'read_checkouts',
                 'read_locations',
             ],
         ]);
@@ -141,7 +144,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         $this->assertNotNull($location);
         parse_str(parse_url($location, PHP_URL_QUERY) ?: '', $query);
         $this->assertSame(
-            'read_customers,write_customers,read_products,read_orders,read_all_orders,read_locations',
+            'read_customers,write_customers,read_products,read_orders,read_all_orders,read_checkouts,read_locations',
             $query['scope'] ?? null,
         );
     }
@@ -219,7 +222,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         $fresh = $store->fresh();
         $this->assertSame(['read_customers', 'read_products'], $fresh->shopify_scopes);
         $this->assertEqualsCanonicalizing(
-            ['write_customers', 'read_orders', 'read_all_orders'],
+            ['write_customers', 'read_orders', 'read_all_orders', 'read_checkouts'],
             $fresh->missingShopifyScopes(),
         );
         $this->assertTrue($fresh->requiresShopifyReauth());
@@ -241,6 +244,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         $this->assertContains('write_customers', $store->missingShopifyScopes());
         $this->assertContains('read_orders', $store->missingShopifyScopes());
         $this->assertContains('read_all_orders', $store->missingShopifyScopes());
+        $this->assertContains('read_checkouts', $store->missingShopifyScopes());
 
         $payload = $this->spa()->actingAs($admin)
             ->getJson("/api/v1/workspaces/{$workspace->id}/stores")
@@ -251,7 +255,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
         $this->assertTrue($payload['requires_shopify_reauth']);
         $this->assertSame(['read_products'], $payload['shopify_scopes']);
         $this->assertEqualsCanonicalizing(
-            ['read_customers', 'write_customers', 'read_orders', 'read_all_orders'],
+            ['read_customers', 'write_customers', 'read_orders', 'read_all_orders', 'read_checkouts'],
             $payload['missing_shopify_scopes'],
         );
         $this->assertArrayNotHasKey('shopify_access_token', $payload);
@@ -358,7 +362,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
                 'refresh_token' => 'shprt_rotated_token',
                 'expires_in' => 3600,
                 'refresh_token_expires_in' => 7776000,
-                'scope' => 'read_customers,write_customers,read_products,read_orders,read_all_orders',
+                'scope' => 'read_customers,write_customers,read_products,read_orders,read_all_orders,read_checkouts',
             ], 200),
             'https://refresh-hooks.myshopify.com/admin/api/2026-10/graphql.json' => function ($request) use ($webhookUri) {
                 static $n = 0;
@@ -418,6 +422,7 @@ class ShopifyScopeAuthorizationTest extends TestCase
                 'read_products',
                 'read_orders',
                 'read_all_orders',
+                'read_checkouts',
             ],
         ]);
 

@@ -130,7 +130,6 @@ class ReconcileMetaPublication
 
             $created = $this->parseCreatedTime($post['created_time'] ?? null);
             if ($created === null || $created->lt($windowStart) || $created->gt($windowEnd)) {
-                // Message-only match without a time window is insufficient evidence.
                 continue;
             }
 
@@ -143,10 +142,8 @@ class ReconcileMetaPublication
                 if ($candidateLink !== null && $this->linksComparable($expectedLink, $candidateLink)) {
                     $linkAgreed = true;
                 } elseif ($candidateLink !== null) {
-                    // Explicit conflicting destination — reject this candidate.
                     continue;
                 }
-                // Missing attachment link on the feed item: still allow message+time uniqueness.
             }
 
             $candidates[] = array_merge($post, ['link_agreed' => $linkAgreed]);

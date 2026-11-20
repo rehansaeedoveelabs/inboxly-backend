@@ -81,6 +81,53 @@ class PublicFormTest extends TestCase
         ])->assertNotFound();
     }
 
+    public function test_embed_renders_image_from_external_url(): void
+    {
+        [$admin, $workspace] = $this->adminWithWorkspace();
+        $store = $this->storeIn($workspace);
+
+        $definition = FormDefinitionSchema::defaultDefinition();
+        $definition['fields'] = [
+            [
+                'id' => 'f_img',
+                'type' => 'image',
+                'label' => 'Hero',
+                'required' => false,
+                'props' => [
+                    'asset_id' => null,
+                    'src' => 'https://cdn.example/hero.png',
+                    'alt' => 'Hero image',
+                ],
+            ],
+            [
+                'id' => 'f_email',
+                'type' => 'email',
+                'label' => 'Email',
+                'required' => true,
+            ],
+            [
+                'id' => 'f_consent',
+                'type' => 'consent',
+                'label' => 'I agree',
+                'required' => true,
+            ],
+        ];
+
+        $form = Form::factory()->create([
+            'store_id' => $store->id,
+            'created_by' => $admin->id,
+            'status' => FormStatus::Enabled,
+            'public_token' => 'tok_image_embed',
+            'definition' => $definition,
+        ]);
+
+        $this->get("/api/v1/public/forms/{$form->public_token}/embed")
+            ->assertOk()
+            ->assertSee('https://cdn.example/hero.png', false)
+            ->assertSee('Hero image', false)
+            ->assertDontSee('name="f_img"', false);
+    }
+
     public function test_required_consent_is_enforced(): void
     {
         [$admin, $workspace] = $this->adminWithWorkspace();

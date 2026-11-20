@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Contact;
 use App\Models\Segment;
+use App\Models\ShopifyCustomerIdentity;
+use App\Models\ShopifyOrder;
 use App\Models\Tag;
 use App\Models\User;
 use App\Support\Segments\SegmentQueryBuilder;
@@ -191,5 +193,54 @@ class SegmentTest extends TestCase
 
         $this->spa()->actingAs($marketer)->postJson("/api/v1/stores/{$store->id}/segments", $valid)->assertCreated();
         $this->spa()->actingAs($marketer)->postJson("/api/v1/segments/{$segment->id}/preview")->assertOk();
+    }
+
+    public function test_orders_has_and_count_rules_use_shopify_identity_join(): void
+    {
+        [$admin, $workspace] = $this->adminWithWorkspace();
+        $store = $this->storeIn($workspace);
+
+        $buyer = $this->contactIn($store, ['email' => 'buyer@example.com']);
+        $browser = $this->contactIn($store, ['email' => 'browser@example.com']);
+        $gid = 'gid://shopify/Customer/9001';
+
+        ShopifyCustomerIdentity::factory()->create([
+            'store_id' => $store->id,
+            'contact_id' => $buyer->id,
+            'shopify_customer_gid' => $gid,
+        ]);
+        ShopifyOrder::factory()->count(2)->create([
+            'store_id' => $store->id,
+            'shopify_customer_gid' => $gid,
+        ]);
+
+        $hasId = $this->spa()->actingAs($admin)->postJson("/api/v1/stores/{$store->id}/segments", [
+            'name' => 'Purchasers',
+            'rules' => $this->rules(['field' => 'orders.has', 'op' => 'is_not_null']),
+        ])->assertCreated()->json('data.id');
+
+        $this->spa()->actingAs($admin)->postJson("/api/v1/segments/{$hasId}/preview")
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('sample.0.email', 'buyer@example.com');
+
+        $countId = $this->spa()->actingAs($admin)->postJson("/api/v1/stores/{$store->id}/segments", [
+            'name' => 'Repeat buyers',
+            'rules' => $this->rules(['field' => 'orders.count', 'op' => 'gte', 'value' => '2']),
+        ])->assertCreated()->json('data.id');
+
+        $this->spa()->actingAs($admin)->postJson("/api/v1/segments/{$countId}/preview")
+            ->assertOk()
+            ->assertJsonPath('count', 1);
+
+        $neverId = $this->spa()->actingAs($admin)->postJson("/api/v1/stores/{$store->id}/segments", [
+            'name' => 'Never purchased',
+            'rules' => $this->rules(['field' => 'orders.has', 'op' => 'is_null']),
+        ])->assertCreated()->json('data.id');
+
+        $this->spa()->actingAs($admin)->postJson("/api/v1/segments/{$neverId}/preview")
+            ->assertOk()
+            ->assertJsonPath('count', 1)
+            ->assertJsonPath('sample.0.email', 'browser@example.com');
     }
 }

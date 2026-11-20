@@ -6,6 +6,7 @@ $shopifyRequiredScopes = [
     'read_products',
     'read_orders',
     'read_all_orders',
+    'read_checkouts',
 ];
 
 return [
@@ -149,6 +150,9 @@ return [
         'webhook_topics' => [
             'APP_UNINSTALLED',
             'APP_SCOPES_UPDATE',
+            // Abandoned cart recovery (requires read_checkouts on the store).
+            'CHECKOUTS_CREATE',
+            'CHECKOUTS_UPDATE',
         ],
         // Lease is derived from ProcessShopifyComplianceRequestJob::$timeout (120), NOT from an
         // arbitrary `queue:work --timeout`. Claim enforces max(config, jobTimeout+60).

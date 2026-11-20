@@ -129,7 +129,6 @@ class FakeMetaProvider implements MetaProvider
             ];
         }
 
-        // Simulated debug_token: valid token with data-access far in the future.
         return [
             'is_valid' => true,
             'expires_at' => now()->addDays(60),
@@ -152,7 +151,6 @@ class FakeMetaProvider implements MetaProvider
             return MetaPublishResult::fail('invalid_content', 'Message is required.', simulated: true);
         }
 
-        // Explicitly simulated IDs — never look like real Graph post IDs.
         $postId = 'simulated_post_'.Str::lower(Str::random(16));
         $created = now()->toIso8601String();
         self::$publishedFeedByPage[$request->pageId][] = [

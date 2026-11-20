@@ -76,6 +76,45 @@ class CampaignSendTest extends TestCase
         ]);
     }
 
+    public function test_send_personalizes_merge_tags_per_recipient(): void
+    {
+        $fake = new FakeEmailSender;
+        $this->app->instance(EmailSender::class, $fake);
+
+        [$admin, $workspace] = $this->adminWithWorkspace();
+        $store = $this->storeIn($workspace);
+        $store->forceFill([
+            'name' => 'Honey Co',
+            'metadata' => ['brand' => ['shop_name' => 'Honey Co']],
+        ])->save();
+
+        $eligible = $this->contactIn($store, [
+            'email' => 'sam@example.com',
+            'first_name' => 'Sam',
+        ]);
+        $eligible->consents()->where('channel', ConsentChannel::Email)->update([
+            'status' => ConsentStatus::Subscribed,
+        ]);
+
+        $campaignId = $this->spa()->actingAs($admin)->postJson("/api/v1/stores/{$store->id}/campaigns", [
+            'name' => 'Personalized',
+            'channel' => 'email',
+            'subject' => 'Hi {{first_name}}',
+            'body' => 'Welcome to {{shop_name}}, {{first_name}}',
+            'audience_type' => 'all_eligible',
+        ])->assertCreated()->json('data.id');
+
+        $this->spa()->actingAs($admin)->postJson("/api/v1/campaigns/{$campaignId}/send")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'sent');
+
+        $this->assertCount(1, $fake->sent);
+        $this->assertSame('Hi Sam', $fake->sent[0]->subject);
+        $this->assertSame('Welcome to Honey Co, Sam', $fake->sent[0]->textBody);
+        $this->assertStringNotContainsString('{{first_name}}', $fake->sent[0]->textBody);
+        $this->assertStringNotContainsString('{{shop_name}}', $fake->sent[0]->textBody);
+    }
+
     public function test_test_send_targets_authenticated_user(): void
     {
         $fake = new FakeEmailSender;

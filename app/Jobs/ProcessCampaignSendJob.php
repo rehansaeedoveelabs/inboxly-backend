@@ -11,6 +11,7 @@ use App\Models\Contact;
 use App\Models\Suppression;
 use App\Support\Messaging\Contracts\EmailSender;
 use App\Support\Messaging\Contracts\SmsSender;
+use App\Support\Messaging\MergeTagPersonalizer;
 use App\Support\Messaging\OutboundMessage;
 use App\Support\Messaging\SendResult;
 use Carbon\CarbonImmutable;
@@ -173,19 +174,31 @@ class ProcessCampaignSendJob implements ShouldQueue
         }
 
         try {
+            $campaign->loadMissing('store');
+            $personalizer = app(MergeTagPersonalizer::class);
+            $vars = $personalizer->varsFor($campaign->store, $contact);
+            $personalized = $personalizer->personalizeMessage(
+                (string) ($campaign->subject ?? ''),
+                (string) ($campaign->html_body ?: ''),
+                (string) ($campaign->body ?: ''),
+                $vars,
+            );
+
             $result = $campaign->channel === CampaignChannel::Email
                 ? $emailSender->send(new OutboundMessage(
                     to: $recipient->address,
-                    subject: (string) $campaign->subject,
-                    htmlBody: (string) ($campaign->html_body ?: ''),
-                    textBody: (string) ($campaign->body ?: ''),
+                    subject: $personalized['subject'],
+                    htmlBody: $personalized['html_body'],
+                    textBody: $personalized['text_body'],
                     toName: trim(($contact->first_name ?? '').' '.($contact->last_name ?? '')) ?: null,
                     idempotencyKey: $campaign->getKey().':'.$recipient->getKey().':'.($recipient->attempts + 1),
                     tags: ['campaign:'.$campaign->getKey(), 'store:'.$campaign->store_id],
                 ))
                 : $smsSender->send([
                     'to' => $recipient->address,
-                    'body' => (string) $campaign->body,
+                    'body' => $personalized['text_body'] !== ''
+                        ? $personalized['text_body']
+                        : $personalizer->replace((string) $campaign->body, $vars),
                     'idempotency_key' => $campaign->getKey().':'.$recipient->getKey(),
                 ]);
         } catch (Throwable $e) {

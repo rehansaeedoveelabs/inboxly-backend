@@ -183,4 +183,71 @@ class BrevoWebhookTest extends TestCase
             ])->assertOk()
             ->assertJsonPath('data.ignored', 1);
     }
+
+    public function test_opened_and_clicked_record_engagement_without_changing_status(): void
+    {
+        [$admin, $workspace] = $this->adminWithWorkspace();
+        $store = $this->storeIn($workspace);
+        $contact = $this->contactIn($store, ['email' => 'engage@example.com']);
+
+        $campaign = Campaign::factory()->create([
+            'store_id' => $store->id,
+            'created_by' => $admin->id,
+            'channel' => 'email',
+            'status' => CampaignStatus::Sent,
+            'subject' => 'Hi',
+            'body' => 'Body',
+            'audience_type' => 'all_eligible',
+        ]);
+
+        $recipient = CampaignRecipient::query()->create([
+            'campaign_id' => $campaign->id,
+            'contact_id' => $contact->id,
+            'channel' => 'email',
+            'address' => 'engage@example.com',
+            'status' => CampaignRecipientStatus::Sent,
+            'provider_message_id' => 'msg-engage-1',
+            'sent_at' => now(),
+        ]);
+
+        $this->withHeader('Authorization', 'Bearer test-brevo-webhook-token')
+            ->postJson('/api/v1/brevo/webhooks', [
+                'event' => 'unique_opened',
+                'email' => 'engage@example.com',
+                'id' => 901,
+                'ts_event' => 100,
+                'message-id' => 'msg-engage-1',
+            ])->assertOk()
+            ->assertJsonPath('data.processed', 1);
+
+        $recipient->refresh();
+        $this->assertSame(CampaignRecipientStatus::Sent, $recipient->status);
+        $this->assertNotNull($recipient->opened_at);
+        $this->assertSame(1, $recipient->open_count);
+
+        $this->withHeader('Authorization', 'Bearer test-brevo-webhook-token')
+            ->postJson('/api/v1/brevo/webhooks', [
+                'event' => 'click',
+                'email' => 'engage@example.com',
+                'id' => 902,
+                'ts_event' => 101,
+                'message-id' => 'msg-engage-1',
+            ])->assertOk()
+            ->assertJsonPath('data.processed', 1);
+
+        $recipient->refresh();
+        $this->assertSame(CampaignRecipientStatus::Sent, $recipient->status);
+        $this->assertNotNull($recipient->clicked_at);
+        $this->assertSame(1, $recipient->click_count);
+
+        $this->spa()->actingAs($admin)->getJson("/api/v1/campaigns/{$campaign->id}")
+            ->assertOk()
+            ->assertJsonPath('data.opened_count', 1)
+            ->assertJsonPath('data.clicked_count', 1);
+
+        $this->spa()->actingAs($admin)->getJson("/api/v1/stores/{$store->id}/insights/overview")
+            ->assertOk()
+            ->assertJsonPath('engagement.emails_opened', 1)
+            ->assertJsonPath('engagement.emails_clicked', 1);
+    }
 }

@@ -34,14 +34,18 @@ class ShopifyAdminGraphqlClient
         $url = "https://{$shopDomain}/admin/api/{$version}/graphql.json";
         $timeout = max(5, (int) config('services.shopify.graphql_timeout_seconds', 20));
 
+        // Shopify rejects `"variables": []` with "Invalid variables parameter."
+        // Omit the key when unused; send a JSON object when present.
+        $body = ['query' => $query];
+        if ($variables !== []) {
+            $body['variables'] = $variables;
+        }
+
         try {
             $response = Http::withHeaders([
                 'X-Shopify-Access-Token' => $accessToken,
                 'Content-Type' => 'application/json',
-            ])->timeout($timeout)->post($url, [
-                'query' => $query,
-                'variables' => $variables,
-            ]);
+            ])->timeout($timeout)->post($url, $body);
         } catch (ConnectionException $e) {
             Log::warning('Shopify Admin GraphQL connection failed.', [
                 'shop_domain' => $shopDomain,

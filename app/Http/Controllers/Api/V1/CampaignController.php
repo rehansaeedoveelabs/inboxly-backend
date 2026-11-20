@@ -128,6 +128,11 @@ class CampaignController extends Controller
     {
         $this->authorize('view', $campaign);
 
+        $campaign->loadCount([
+            'recipients as opened_count' => fn ($query) => $query->whereNotNull('opened_at'),
+            'recipients as clicked_count' => fn ($query) => $query->whereNotNull('clicked_at'),
+        ]);
+
         return new CampaignResource($campaign);
     }
 

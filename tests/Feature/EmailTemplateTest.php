@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Campaign;
 use App\Models\EmailTemplate;
+use App\Models\ShopifyProduct;
+use App\Models\Store;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\Concerns\CreatesAudience;
@@ -98,7 +100,7 @@ class EmailTemplateTest extends TestCase
         $this->assertSoftDeleted('email_templates', ['id' => $copyId]);
     }
 
-    public function test_rejects_invalid_and_product_blocks(): void
+    public function test_rejects_unknown_block_types(): void
     {
         [$admin, $workspace] = $this->adminWithWorkspace();
         $store = $this->storeIn($workspace);
@@ -108,10 +110,99 @@ class EmailTemplateTest extends TestCase
             'document' => [
                 'version' => 1,
                 'blocks' => [
-                    ['id' => 'p1', 'type' => 'product', 'props' => []],
+                    ['id' => 'p1', 'type' => 'carousel', 'props' => []],
                 ],
             ],
         ])->assertUnprocessable()->assertJsonValidationErrors('document');
+    }
+
+    public function test_product_block_persists_and_renders_featured_image(): void
+    {
+        [$admin, $workspace] = $this->adminWithWorkspace();
+        $store = Store::factory()->withShopifyCredentials('product-email.myshopify.com')->create([
+            'workspace_id' => $workspace->id,
+            'domain' => 'shop.example.com',
+        ]);
+
+        $product = ShopifyProduct::factory()->create([
+            'store_id' => $store->id,
+            'title' => 'Honey Jar',
+            'handle' => 'honey-jar',
+            'metadata' => [
+                'featured_image_url' => 'https://cdn.example/honey.jpg',
+                'variant_count' => 1,
+                'price_min' => '12.00',
+                'price_max' => '12.00',
+                'currency_code' => 'USD',
+            ],
+        ]);
+
+        $document = [
+            'version' => 1,
+            'settings' => ['width' => 600, 'background' => '#ffffff'],
+            'blocks' => [
+                [
+                    'id' => 'prod_1',
+                    'type' => 'product',
+                    'props' => [
+                        'shopify_product_id' => $product->id,
+                        'title' => 'Honey Jar',
+                        'image_url' => 'https://cdn.example/honey.jpg',
+                        'product_url' => 'https://shop.example.com/products/honey-jar',
+                        'price' => '12.00',
+                        'currency_code' => 'USD',
+                        'button_label' => 'Shop now',
+                        'show_title' => true,
+                        'show_price' => true,
+                        'show_button' => true,
+                    ],
+                ],
+            ],
+        ];
+
+        $id = $this->spa()->actingAs($admin)->postJson("/api/v1/stores/{$store->id}/email-templates", [
+            'name' => 'Product spotlight',
+            'document' => $document,
+        ])->assertCreated()
+            ->assertJsonPath('data.document.blocks.0.type', 'product')
+            ->assertJsonPath('data.document.blocks.0.props.shopify_product_id', $product->id)
+            ->json('data.id');
+
+        $html = $this->spa()->actingAs($admin)->getJson("/api/v1/email-templates/{$id}")
+            ->assertOk()
+            ->json('data.html');
+
+        $this->assertIsString($html);
+        $this->assertStringContainsString('Honey Jar', $html);
+        $this->assertStringContainsString('https://cdn.example/honey.jpg', $html);
+        $this->assertStringContainsString('https://shop.example.com/products/honey-jar', $html);
+        $this->assertStringContainsString('USD 12.00', $html);
+        $this->assertStringContainsString('Shop now', $html);
+
+        $preview = $this->spa()->actingAs($admin)->postJson("/api/v1/stores/{$store->id}/email-templates/preview", [
+            'document' => [
+                'version' => 1,
+                'blocks' => [
+                    [
+                        'id' => 'prod_empty',
+                        'type' => 'product',
+                        'props' => [
+                            'shopify_product_id' => $product->id,
+                            'title' => '',
+                            'image_url' => null,
+                            'product_url' => null,
+                            'button_label' => 'Buy',
+                            'show_title' => true,
+                            'show_button' => true,
+                        ],
+                    ],
+                ],
+            ],
+        ])->assertOk()->json('html');
+
+        $this->assertStringContainsString('Honey Jar', $preview);
+        $this->assertStringContainsString('https://cdn.example/honey.jpg', $preview);
+        $this->assertStringContainsString('/products/honey-jar', $preview);
     }
 
     public function test_apply_template_to_campaign(): void

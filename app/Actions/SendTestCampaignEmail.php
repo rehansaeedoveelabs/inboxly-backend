@@ -6,6 +6,7 @@ use App\Enums\CampaignChannel;
 use App\Models\Campaign;
 use App\Models\User;
 use App\Support\Messaging\Contracts\EmailSender;
+use App\Support\Messaging\MergeTagPersonalizer;
 use App\Support\Messaging\OutboundMessage;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -16,7 +17,10 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
  */
 class SendTestCampaignEmail
 {
-    public function __construct(private EmailSender $emailSender) {}
+    public function __construct(
+        private EmailSender $emailSender,
+        private MergeTagPersonalizer $personalizer,
+    ) {}
 
     /**
      * @return array{accepted: bool, provider_message_id: ?string, to: string, error_code: ?string, error_message: ?string}
@@ -57,11 +61,17 @@ class SendTestCampaignEmail
             ]);
         }
 
+        $campaign->loadMissing('store');
+        $firstName = trim((string) (explode(' ', (string) $user->name)[0] ?? ''));
+        $vars = $this->personalizer->varsFor($campaign->store, null);
+        $vars['first_name'] = $firstName !== '' ? $firstName : 'there';
+        $personalized = $this->personalizer->personalizeMessage($subject, $html, $text, $vars);
+
         $result = $this->emailSender->send(new OutboundMessage(
             to: $to,
-            subject: '[Test] '.$subject,
-            htmlBody: $html,
-            textBody: $text,
+            subject: '[Test] '.$personalized['subject'],
+            htmlBody: $personalized['html_body'],
+            textBody: $personalized['text_body'],
             toName: $user->name,
             idempotencyKey: 'test:'.$campaign->getKey().':'.$to.':'.now()->format('YmdHi'),
             tags: ['inboxly-test', 'campaign:'.$campaign->getKey()],

@@ -5,10 +5,15 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\SubmitPublicForm;
 use App\Enums\FormStatus;
 use App\Http\Controllers\Controller;
+use App\Models\Asset;
 use App\Models\Form;
+use App\Support\Forms\FormDefinitionSchema;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class PublicFormController extends Controller
 {
@@ -72,10 +77,48 @@ class PublicFormController extends Controller
             $type = (string) ($field['type'] ?? 'text');
             $label = e((string) ($field['label'] ?? ''));
             $required = ($field['required'] ?? false) === true ? 'required' : '';
-            if ($type === 'consent') {
+            $props = is_array($field['props'] ?? null) ? $field['props'] : [];
+
+            if ($type === 'image') {
+                $alt = e(is_string($props['alt'] ?? null) && trim($props['alt']) !== ''
+                    ? trim($props['alt'])
+                    : (string) ($field['label'] ?? 'Image'));
+                $src = is_string($props['src'] ?? null) ? trim($props['src']) : '';
+                $assetId = is_string($props['asset_id'] ?? null) ? trim($props['asset_id']) : '';
+                $imgSrc = '';
+                if ($src !== '' && $this->isHttpUrl($src)) {
+                    $imgSrc = $src;
+                } elseif ($assetId !== '') {
+                    $imgSrc = url('/api/v1/public/forms/'.$form->public_token.'/assets/'.$assetId);
+                }
+                if ($imgSrc !== '') {
+                    $fieldHtml .= '<div style="text-align:center;"><img src="'.e($imgSrc).'" alt="'.$alt.'" '
+                        .'style="display:block;max-width:100%;height:auto;margin:0 auto;border-radius:8px;"/></div>';
+                }
+
+                continue;
+            }
+
+            if ($type === 'heading') {
+                $fieldHtml .= '<p style="margin:0;font-size:16px;font-weight:700;line-height:1.3;">'.$label.'</p>';
+
+                continue;
+            }
+
+            if ($type === 'spacer') {
+                $fieldHtml .= '<div style="height:12px;border-top:1px solid rgba(0,0,0,.08);"></div>';
+
+                continue;
+            }
+
+            if ($type === 'button' || ! FormDefinitionSchema::isInputType($type)) {
+                continue;
+            }
+
+            if ($type === 'consent' || $type === 'checkbox') {
                 $fieldHtml .= "<label style=\"display:flex;gap:8px;align-items:flex-start;font-size:12px;opacity:.9;\"><input type=\"checkbox\" name=\"{$id}\" {$required}/><span>{$label}</span></label>";
             } else {
-                $inputType = $type === 'email' ? 'email' : ($type === 'phone' ? 'tel' : 'text');
+                $inputType = $type === 'email' ? 'email' : ($type === 'phone' ? 'tel' : ($type === 'date' ? 'date' : 'text'));
                 $fieldHtml .= "<input name=\"{$id}\" type=\"{$inputType}\" placeholder=\"{$label}\" {$required} style=\"height:40px;width:100%;border:1px solid rgba(0,0,0,.1);border-radius:8px;padding:0 12px;\"/>";
             }
         }
@@ -118,6 +161,32 @@ HTML;
         return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
     }
 
+    /**
+     * Stream a store asset referenced by an enabled form (public embed images).
+     */
+    public function asset(string $token, string $assetId): StreamedResponse
+    {
+        $form = $this->findEnabled($token);
+        if (! $this->formReferencesAsset($form, $assetId)) {
+            throw new NotFoundHttpException('Asset not found for this form.');
+        }
+
+        $asset = Asset::query()
+            ->where('store_id', $form->store_id)
+            ->whereKey($assetId)
+            ->firstOrFail();
+
+        if (! $asset->fileExists()) {
+            throw new NotFoundHttpException('The asset file is no longer available.');
+        }
+
+        return Storage::disk($asset->disk ?: 'local')->response(
+            $asset->path,
+            $asset->original_filename,
+            ['Content-Type' => $asset->mime_type ?: 'application/octet-stream'],
+        );
+    }
+
     private function findEnabled(string $token): Form
     {
         $form = Form::query()
@@ -126,5 +195,29 @@ HTML;
             ->firstOrFail();
 
         return $form;
+    }
+
+    private function formReferencesAsset(Form $form, string $assetId): bool
+    {
+        $definition = is_array($form->definition) ? $form->definition : [];
+        $fields = is_array($definition['fields'] ?? null) ? $definition['fields'] : [];
+        foreach ($fields as $field) {
+            if (! is_array($field) || ($field['type'] ?? null) !== 'image') {
+                continue;
+            }
+            $props = is_array($field['props'] ?? null) ? $field['props'] : [];
+            if (($props['asset_id'] ?? null) === $assetId) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isHttpUrl(string $url): bool
+    {
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+
+        return in_array(is_string($scheme) ? strtolower($scheme) : '', ['http', 'https'], true);
     }
 }

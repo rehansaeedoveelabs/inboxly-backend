@@ -18,8 +18,9 @@ use App\Enums\ConsentStatus;
  *     ]
  *   }
  *
- * Fields: email, phone, first_name, last_name, source, tag (slug), consent.email|sms|push.
- * Ops:    eq, neq, contains, starts_with, in, not_in, is_null, is_not_null.
+ * Fields: email, phone, first_name, last_name, source, tag (slug), consent.email|sms|push,
+ *         orders.has, orders.count (via synced Shopify orders + customer identity).
+ * Ops:    eq, neq, contains, starts_with, in, not_in, is_null, is_not_null, gte, lte.
  *
  * Semantics worth knowing:
  *  - neq / not_in also match rows where the column is NULL.
@@ -40,9 +41,17 @@ final class SegmentRules
 
     public const TAG_FIELD = 'tag';
 
-    public const OPS = ['eq', 'neq', 'contains', 'starts_with', 'in', 'not_in', 'is_null', 'is_not_null'];
+    public const ORDERS_HAS_FIELD = 'orders.has';
+
+    public const ORDERS_COUNT_FIELD = 'orders.count';
+
+    public const OPS = ['eq', 'neq', 'contains', 'starts_with', 'in', 'not_in', 'is_null', 'is_not_null', 'gte', 'lte'];
 
     private const CONSENT_OPS = ['eq', 'neq', 'in', 'not_in', 'is_null', 'is_not_null'];
+
+    private const ORDERS_HAS_OPS = ['is_null', 'is_not_null'];
+
+    private const ORDERS_COUNT_OPS = ['eq', 'neq', 'gte', 'lte'];
 
     private const LIST_OPS = ['in', 'not_in'];
 
@@ -55,6 +64,8 @@ final class SegmentRules
             ...self::COLUMN_FIELDS,
             self::TAG_FIELD,
             ...array_map(fn (ConsentChannel $c) => 'consent.'.$c->value, ConsentChannel::cases()),
+            self::ORDERS_HAS_FIELD,
+            self::ORDERS_COUNT_FIELD,
         ];
     }
 
@@ -62,6 +73,16 @@ final class SegmentRules
     {
         return str_starts_with($field, 'consent.')
             && ConsentChannel::tryFrom(substr($field, 8)) !== null;
+    }
+
+    public static function isOrdersHasField(string $field): bool
+    {
+        return $field === self::ORDERS_HAS_FIELD;
+    }
+
+    public static function isOrdersCountField(string $field): bool
+    {
+        return $field === self::ORDERS_COUNT_FIELD;
     }
 
     public static function isKnownField(mixed $field): bool
@@ -76,7 +97,24 @@ final class SegmentRules
             return false;
         }
 
-        return ! self::isConsentField($field) || in_array($op, self::CONSENT_OPS, true);
+        if (self::isConsentField($field)) {
+            return in_array($op, self::CONSENT_OPS, true);
+        }
+
+        if (self::isOrdersHasField($field)) {
+            return in_array($op, self::ORDERS_HAS_OPS, true);
+        }
+
+        if (self::isOrdersCountField($field)) {
+            return in_array($op, self::ORDERS_COUNT_OPS, true);
+        }
+
+        // gte/lte are order-count only
+        if (in_array($op, ['gte', 'lte'], true)) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -167,6 +205,17 @@ final class SegmentRules
     {
         if (in_array($op, self::NULL_OPS, true)) {
             return null;
+        }
+
+        if (self::isOrdersCountField($field)) {
+            if (is_int($value) && $value >= 0 && $value <= 1_000_000) {
+                return null;
+            }
+            if (is_string($value) && preg_match('/^\d{1,7}$/', $value) === 1) {
+                return null;
+            }
+
+            return 'Order count values must be a non-negative integer.';
         }
 
         $isList = in_array($op, self::LIST_OPS, true);

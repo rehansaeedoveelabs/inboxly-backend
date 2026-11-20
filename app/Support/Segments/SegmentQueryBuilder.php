@@ -79,9 +79,53 @@ class SegmentQueryBuilder
             $this->applyColumn($q, $field, $op, $value);
         } elseif ($field === SegmentRules::TAG_FIELD) {
             $this->applyTag($q, $op, $value);
+        } elseif (SegmentRules::isOrdersHasField($field)) {
+            $this->applyOrdersHas($q, $op);
+        } elseif (SegmentRules::isOrdersCountField($field)) {
+            $this->applyOrdersCount($q, $op, $value);
         } else {
             $this->applyConsent($q, ConsentChannel::from(substr($field, 8)), $op, $value);
         }
+    }
+
+    private function applyOrdersHas(Builder $q, string $op): void
+    {
+        $existsSql = $this->ordersCountSubquerySql($q);
+
+        match ($op) {
+            'is_not_null' => $q->whereRaw("({$existsSql}) > 0"),
+            'is_null' => $q->whereRaw("({$existsSql}) = 0"),
+            default => null,
+        };
+    }
+
+    private function applyOrdersCount(Builder $q, string $op, mixed $value): void
+    {
+        $count = is_int($value) ? $value : (int) $value;
+        $sql = $this->ordersCountSubquerySql($q);
+        $operator = match ($op) {
+            'eq' => '=',
+            'neq' => '!=',
+            'gte' => '>=',
+            'lte' => '<=',
+            default => '=',
+        };
+
+        $q->whereRaw("({$sql}) {$operator} ?", [$count]);
+    }
+
+    private function ordersCountSubquerySql(Builder $q): string
+    {
+        $contactId = $q->qualifyColumn('id');
+        $storeId = $q->qualifyColumn('store_id');
+
+        return "select count(*) from shopify_orders
+            inner join shopify_customer_identities
+                on shopify_customer_identities.shopify_customer_gid = shopify_orders.shopify_customer_gid
+                and shopify_customer_identities.store_id = shopify_orders.store_id
+            where shopify_customer_identities.contact_id = {$contactId}
+              and shopify_orders.store_id = {$storeId}
+              and shopify_orders.shopify_customer_gid is not null";
     }
 
     private function applyColumn(Builder $q, string $column, string $op, mixed $value): void
