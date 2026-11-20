@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\V1\Shopify\ShopifyCommerceSyncController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyComplianceRequestController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyConnectionController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyOAuthController;
+use App\Http\Controllers\Api\V1\Shopify\ShopifyProductController;
 use App\Http\Controllers\Api\V1\Shopify\ShopifyWebhookController;
 use App\Http\Controllers\Api\V1\StoreActivationController;
 use App\Http\Controllers\Api\V1\StoreController;
@@ -118,6 +119,8 @@ Route::post('brevo/webhooks', BrevoWebhookController::class)
 Route::prefix('public/forms')->middleware('throttle:60,1')->group(function () {
     Route::get('{token}', [PublicFormController::class, 'show']);
     Route::get('{token}/embed', [PublicFormController::class, 'embed']);
+    Route::get('{token}/assets/{assetId}', [PublicFormController::class, 'asset'])
+        ->middleware('throttle:120,1');
     Route::post('{token}/submissions', [PublicFormController::class, 'submit'])
         ->middleware('throttle:30,1');
 });
@@ -162,6 +165,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('stores/{store}/shopify/sync', [ShopifyCommerceSyncController::class, 'store'])
         ->middleware('throttle:10,1')
         ->name('shopify.sync.store');
+    Route::get('stores/{store}/shopify/products', [ShopifyProductController::class, 'index'])
+        ->middleware('throttle:60,1')
+        ->name('shopify.products.index');
 
     Route::get('stores/{store}/meta/oauth/start', [MetaOAuthController::class, 'start'])
         ->middleware('throttle:meta-oauth')
@@ -220,6 +226,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('stores/{store}/insights/activity', [StoreInsightsController::class, 'activity']);
     Route::get('stores/{store}/brand', [StoreBrandController::class, 'show']);
     Route::put('stores/{store}/brand', [StoreBrandController::class, 'update']);
+    Route::post('stores/{store}/brand/import', [StoreBrandController::class, 'importFromShopify']);
     Route::get('stores/{store}/channels', [StoreChannelsController::class, 'show']);
     Route::put('stores/{store}/channels', [StoreChannelsController::class, 'update']);
     Route::get('stores/{store}/campaigns/summary', [CampaignController::class, 'summary']);

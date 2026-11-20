@@ -59,7 +59,6 @@ class CreateMetaPublications
                 $code = $unusable === 'needs_reauth'
                     ? ($connection->last_error_code ?? 'needs_reauth')
                     : $unusable;
-                // Leave message null so publicErrorGuidance() can map from the code.
                 $connection->markNeedsReauth($code, null);
             }
 

@@ -115,6 +115,31 @@ class FormDefinitionSchema
                 if (array_key_exists('required', $field) && ! is_bool($field['required'])) {
                     $errors[] = "Field {$index} required must be a boolean.";
                 }
+                if (array_key_exists('props', $field)) {
+                    $props = $field['props'];
+                    if (! is_array($props)) {
+                        $errors[] = "Field {$index} props must be an object.";
+                    } elseif (is_string($type) && $type === 'image') {
+                        foreach (['asset_id', 'src', 'alt'] as $propKey) {
+                            if (! array_key_exists($propKey, $props)) {
+                                continue;
+                            }
+                            $value = $props[$propKey];
+                            if ($value !== null && ! is_string($value)) {
+                                $errors[] = "Field {$index} props.{$propKey} must be a string or null.";
+                            } elseif (is_string($value) && mb_strlen($value) > 2048) {
+                                $errors[] = "Field {$index} props.{$propKey} is too long.";
+                            }
+                        }
+                        $src = $props['src'] ?? null;
+                        if (is_string($src) && trim($src) !== '') {
+                            $scheme = parse_url($src, PHP_URL_SCHEME);
+                            if (! in_array(is_string($scheme) ? strtolower($scheme) : '', ['http', 'https'], true)) {
+                                $errors[] = "Field {$index} props.src must be an http(s) URL.";
+                            }
+                        }
+                    }
+                }
             }
         }
 

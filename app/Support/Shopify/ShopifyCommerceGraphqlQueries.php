@@ -48,6 +48,16 @@ final class ShopifyCommerceGraphqlQueries
             featuredImage {
               url
             }
+            priceRangeV2 {
+              minVariantPrice {
+                amount
+                currencyCode
+              }
+              maxVariantPrice {
+                amount
+                currencyCode
+              }
+            }
             variantsCount {
               count
             }

@@ -242,6 +242,9 @@ class SyncShopifyCommerceResourcePage
 
             $featured = is_array($node['featuredImage'] ?? null) ? $node['featuredImage'] : [];
             $variantsCount = is_array($node['variantsCount'] ?? null) ? $node['variantsCount'] : [];
+            $priceRange = is_array($node['priceRangeV2'] ?? null) ? $node['priceRangeV2'] : [];
+            $minPrice = is_array($priceRange['minVariantPrice'] ?? null) ? $priceRange['minVariantPrice'] : [];
+            $maxPrice = is_array($priceRange['maxVariantPrice'] ?? null) ? $priceRange['maxVariantPrice'] : [];
 
             ShopifyProduct::query()->updateOrCreate(
                 [
@@ -261,6 +264,9 @@ class SyncShopifyCommerceResourcePage
                         'variant_count' => isset($variantsCount['count']) && is_numeric($variantsCount['count'])
                             ? (int) $variantsCount['count']
                             : null,
+                        'price_min' => $this->nullableString($minPrice['amount'] ?? null),
+                        'price_max' => $this->nullableString($maxPrice['amount'] ?? null),
+                        'currency_code' => $this->nullableString($minPrice['currencyCode'] ?? $maxPrice['currencyCode'] ?? null),
                     ], static fn ($v) => $v !== null),
                 ],
             );

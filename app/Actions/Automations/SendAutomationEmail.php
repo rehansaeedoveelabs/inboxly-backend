@@ -10,6 +10,7 @@ use App\Models\AutomationStepRun;
 use App\Models\Contact;
 use App\Models\Suppression;
 use App\Support\Messaging\Contracts\EmailSender;
+use App\Support\Messaging\MergeTagPersonalizer;
 use App\Support\Messaging\OutboundMessage;
 use App\Support\Messaging\SendResult;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +21,10 @@ use Illuminate\Support\Facades\DB;
  */
 class SendAutomationEmail
 {
-    public function __construct(private EmailSender $emailSender) {}
+    public function __construct(
+        private EmailSender $emailSender,
+        private MergeTagPersonalizer $personalizer,
+    ) {}
 
     /**
      * @return array{status: AutomationStepRunStatus, result: ?SendResult, error_code: ?string, error_message: ?string}
@@ -81,6 +85,13 @@ class SendAutomationEmail
                 'error_message' => 'Email body is required.',
             ];
         }
+
+        $enrollment->loadMissing('store');
+        $vars = $this->personalizer->varsFor($enrollment->store, $contact);
+        $personalized = $this->personalizer->personalizeMessage($subject, $htmlBody, $textBody, $vars);
+        $subject = $personalized['subject'];
+        $htmlBody = $personalized['html_body'];
+        $textBody = $personalized['text_body'];
 
         $idempotencyKey = AutomationStepRun::idempotencyKeyFor(
             $enrollment->getKey(),

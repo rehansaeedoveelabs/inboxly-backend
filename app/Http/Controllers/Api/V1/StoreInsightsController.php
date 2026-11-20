@@ -7,7 +7,9 @@ use App\Enums\CampaignStatus;
 use App\Enums\ConsentChannel;
 use App\Enums\ConsentStatus;
 use App\Http\Controllers\Controller;
+use App\Enums\CampaignRecipientStatus;
 use App\Models\AutomationEnrollment;
+use App\Models\CampaignRecipient;
 use App\Models\ConsentEvent;
 use App\Models\Contact;
 use App\Models\ContactConsent;
@@ -70,6 +72,23 @@ class StoreInsightsController extends Controller
             ])
             ->values();
 
+        $recipientBase = CampaignRecipient::query()
+            ->whereHas('campaign', fn ($q) => $q->where('store_id', $store->getKey()));
+        $emailsSent = (clone $recipientBase)
+            ->where('status', CampaignRecipientStatus::Sent)
+            ->where('channel', 'email')
+            ->count();
+        $emailsOpened = (clone $recipientBase)
+            ->where('channel', 'email')
+            ->whereNotNull('opened_at')
+            ->count();
+        $emailsClicked = (clone $recipientBase)
+            ->where('channel', 'email')
+            ->whereNotNull('clicked_at')
+            ->count();
+        $openRate = $emailsSent > 0 ? round(($emailsOpened / $emailsSent) * 100, 1) : 0.0;
+        $clickRate = $emailsSent > 0 ? round(($emailsClicked / $emailsSent) * 100, 1) : 0.0;
+
         return response()->json([
             'contacts_total' => Contact::query()->where('store_id', $store->getKey())->count(),
             'email_subscribers' => $emailSubscribers,
@@ -84,6 +103,13 @@ class StoreInsightsController extends Controller
                     CampaignStatus::PartiallySent,
                 ])->count(),
                 'failed' => (clone $campaignBase)->where('status', CampaignStatus::Failed)->count(),
+            ],
+            'engagement' => [
+                'emails_sent' => $emailsSent,
+                'emails_opened' => $emailsOpened,
+                'emails_clicked' => $emailsClicked,
+                'open_rate' => $openRate,
+                'click_rate' => $clickRate,
             ],
             'automations' => [
                 'total' => (clone $automationBase)->count(),

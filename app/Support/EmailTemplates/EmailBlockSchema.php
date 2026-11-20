@@ -4,12 +4,11 @@ namespace App\Support\EmailTemplates;
 
 /**
  * Validates the block-document JSON used as the template source of truth.
- * Product blocks are intentionally unsupported until Shopify product sync exists.
  */
 class EmailBlockSchema
 {
     public const ALLOWED_TYPES = [
-        'text', 'image', 'button', 'divider', 'spacer', 'header', 'footer',
+        'text', 'image', 'button', 'divider', 'spacer', 'header', 'footer', 'product',
     ];
 
     /**
@@ -52,10 +51,6 @@ class EmailBlockSchema
                 continue;
             }
 
-            if ($type === 'product') {
-                $errors[] = "Block {$index}: product blocks are not available yet.";
-            }
-
             $id = $block['id'] ?? null;
             if (! is_string($id) || trim($id) === '') {
                 $errors[] = "Block {$index} requires a string id.";
@@ -91,6 +86,18 @@ class EmailBlockSchema
                 ...self::requireString($props, 'label', $index),
                 ...self::requireString($props, 'href', $index),
             ],
+            'product' => [
+                ...self::optionalString($props, 'shopify_product_id', $index),
+                ...self::optionalString($props, 'title', $index),
+                ...self::optionalString($props, 'image_url', $index),
+                ...self::optionalString($props, 'product_url', $index),
+                ...self::optionalString($props, 'price', $index),
+                ...self::optionalString($props, 'currency_code', $index),
+                ...self::optionalString($props, 'button_label', $index),
+                ...self::optionalBool($props, 'show_title', $index),
+                ...self::optionalBool($props, 'show_price', $index),
+                ...self::optionalBool($props, 'show_button', $index),
+            ],
             'divider' => [],
             'spacer' => self::optionalInt($props, 'height', $index, 8, 120),
             default => [],
@@ -122,6 +129,22 @@ class EmailBlockSchema
         }
         if ($props[$key] !== null && ! is_string($props[$key])) {
             return ["Block {$index} props.{$key} must be a string."];
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $props
+     * @return list<string>
+     */
+    private static function optionalBool(array $props, string $key, int $index): array
+    {
+        if (! array_key_exists($key, $props) || $props[$key] === null) {
+            return [];
+        }
+        if (! is_bool($props[$key])) {
+            return ["Block {$index} props.{$key} must be a boolean."];
         }
 
         return [];

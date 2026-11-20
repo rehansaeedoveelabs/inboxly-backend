@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Shopify\ImportBrandAssetsFromShopify;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\StoreResource;
 use App\Models\Store;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class StoreBrandController extends Controller
@@ -23,10 +25,13 @@ class StoreBrandController extends Controller
         $data = $request->validate([
             'logo_asset_id' => ['sometimes', 'nullable', 'string', 'max:26'],
             'logo_name' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'imported_logo_url' => ['sometimes', 'nullable', 'string', 'max:2000'],
             'colors' => ['sometimes', 'array'],
             'colors.accent' => ['sometimes', 'nullable', 'string', 'max:32'],
             'colors.dark' => ['sometimes', 'nullable', 'string', 'max:32'],
             'colors.light' => ['sometimes', 'nullable', 'string', 'max:32'],
+            'colors.additional' => ['sometimes', 'array', 'max:6'],
+            'colors.additional.*' => ['string', 'max:32'],
             'fonts' => ['sometimes', 'array'],
             'fonts.headings' => ['sometimes', 'nullable', 'string', 'max:120'],
             'fonts.body' => ['sometimes', 'nullable', 'string', 'max:120'],
@@ -45,7 +50,7 @@ class StoreBrandController extends Controller
         $metadata = is_array($store->metadata) ? $store->metadata : [];
         $brand = is_array($metadata['brand'] ?? null) ? $metadata['brand'] : [];
 
-        foreach (['logo_asset_id', 'logo_name', 'colors', 'fonts', 'social_links'] as $key) {
+        foreach (['logo_asset_id', 'logo_name', 'imported_logo_url', 'colors', 'fonts', 'social_links'] as $key) {
             if (array_key_exists($key, $data)) {
                 $brand[$key] = $data[$key];
             }
@@ -56,5 +61,18 @@ class StoreBrandController extends Controller
         $store->save();
 
         return new StoreResource($store->refresh());
+    }
+
+    public function importFromShopify(Store $store, ImportBrandAssetsFromShopify $import): JsonResponse
+    {
+        $this->authorize('manageAudience', $store);
+
+        $result = $import->handle($store);
+
+        return response()->json([
+            'data' => (new StoreResource($store->refresh()))->resolve(),
+            'source' => $result['source'],
+            'notice' => $result['notice'],
+        ]);
     }
 }

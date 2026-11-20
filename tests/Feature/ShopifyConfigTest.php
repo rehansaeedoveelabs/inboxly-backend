@@ -29,6 +29,7 @@ class ShopifyConfigTest extends TestCase
             'read_products',
             'read_orders',
             'read_all_orders',
+            'read_checkouts',
         ], $required);
         $this->assertSame($required, $scopes);
         $this->assertContains('write_customers', $scopes);

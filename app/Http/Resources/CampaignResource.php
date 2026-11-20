@@ -34,6 +34,8 @@ class CampaignResource extends JsonResource
             'sent_count' => $this->sent_count,
             'failed_count' => $this->failed_count,
             'skipped_count' => $this->skipped_count,
+            'opened_count' => $this->when(isset($this->opened_count), (int) $this->opened_count),
+            'clicked_count' => $this->when(isset($this->clicked_count), (int) $this->clicked_count),
             'send_error' => $this->send_error,
             'meta_message' => $this->meta_message,
             'meta_link' => $this->meta_link,

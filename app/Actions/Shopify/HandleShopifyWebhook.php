@@ -17,6 +17,7 @@ class HandleShopifyWebhook
 {
     public function __construct(
         private readonly AcceptShopifyComplianceWebhook $acceptCompliance,
+        private readonly ProcessShopifyCheckoutWebhook $processCheckout,
     ) {}
 
     /**
@@ -92,6 +93,12 @@ class HandleShopifyWebhook
         match ($topic) {
             'app/uninstalled' => $this->handleUninstalled($store, $shopDomain),
             'app/scopes_update' => $this->handleScopesUpdate($store, $shopDomain, $payload),
+            'checkouts/create', 'checkouts/update' => $store !== null
+                ? $this->processCheckout->handle($store, $payload, $topic)
+                : Log::info('Shopify checkout webhook for unknown shop.', [
+                    'topic' => $topic,
+                    'shop_domain' => $shopDomain,
+                ]),
             default => Log::info('Ignored unsupported Shopify webhook topic.', [
                 'topic' => $topic,
                 'shop_domain' => $shopDomain,

@@ -3,6 +3,7 @@
 namespace App\Support\EmailTemplates;
 
 use App\Models\Asset;
+use App\Models\ShopifyProduct;
 use App\Models\Store;
 
 /**
@@ -69,6 +70,7 @@ class EmailDocumentRenderer
             ),
             'image' => $this->renderImage($store, $props, $assetUrlResolver, $showEmptyImagePlaceholders),
             'button' => $this->renderButton($props),
+            'product' => $this->renderProduct($store, $props, $showEmptyImagePlaceholders),
             'divider' => '<tr><td style="padding:16px;"><hr style="border:none;border-top:1px solid #dddddd;"></td></tr>',
             'spacer' => $this->renderSpacer($props),
             default => '',
@@ -162,6 +164,121 @@ class EmailDocumentRenderer
         $height = max(8, min(120, $height));
 
         return '<tr><td style="height:'.$height.'px;line-height:'.$height.'px;font-size:1px;">&nbsp;</td></tr>';
+    }
+
+    /**
+     * Shopify product card: featured image + title + shop CTA.
+     *
+     * @param  array<string, mixed>  $props
+     */
+    private function renderProduct(Store $store, array $props, bool $showEmptyPlaceholders = false): string
+    {
+        $productId = is_string($props['shopify_product_id'] ?? null) ? trim($props['shopify_product_id']) : '';
+        $title = is_string($props['title'] ?? null) ? trim($props['title']) : '';
+        $imageUrl = is_string($props['image_url'] ?? null) ? trim($props['image_url']) : '';
+        $price = is_string($props['price'] ?? null) ? trim($props['price']) : '';
+        $currencyCode = is_string($props['currency_code'] ?? null) ? trim($props['currency_code']) : '';
+        $productUrl = $this->sanitizer->sanitizeUrl(
+            is_string($props['product_url'] ?? null) ? $props['product_url'] : null,
+        );
+        $buttonLabel = is_string($props['button_label'] ?? null) && trim($props['button_label']) !== ''
+            ? trim($props['button_label'])
+            : 'Shop now';
+        $showTitle = ! array_key_exists('show_title', $props) || $props['show_title'] !== false;
+        $showPrice = ! array_key_exists('show_price', $props) || $props['show_price'] !== false;
+        $showButton = ! array_key_exists('show_button', $props) || $props['show_button'] !== false;
+
+        if ($productId !== '') {
+            $product = ShopifyProduct::query()
+                ->where('store_id', $store->getKey())
+                ->whereKey($productId)
+                ->first();
+            if ($product !== null) {
+                if ($title === '' && is_string($product->title)) {
+                    $title = $product->title;
+                }
+                $meta = is_array($product->metadata) ? $product->metadata : [];
+                if ($imageUrl === '' && isset($meta['featured_image_url']) && is_string($meta['featured_image_url'])) {
+                    $imageUrl = $meta['featured_image_url'];
+                }
+                if ($price === '' && isset($meta['price_min']) && is_string($meta['price_min'])) {
+                    $price = $meta['price_min'];
+                    if (
+                        isset($meta['price_max']) && is_string($meta['price_max'])
+                        && $meta['price_max'] !== $meta['price_min']
+                    ) {
+                        $price = $meta['price_min'].' – '.$meta['price_max'];
+                    }
+                }
+                if ($currencyCode === '' && isset($meta['currency_code']) && is_string($meta['currency_code'])) {
+                    $currencyCode = $meta['currency_code'];
+                }
+                if ($productUrl === null) {
+                    $productUrl = $this->sanitizer->sanitizeUrl($store->storefrontProductUrl($product->handle));
+                }
+            }
+        }
+
+        if ($productId === '' && $title === '' && $imageUrl === '') {
+            return $showEmptyPlaceholders
+                ? $this->emptyImagePlaceholder('Choose a Shopify product for this block')
+                : '';
+        }
+
+        $parts = [];
+        if ($imageUrl !== '' && $this->isHttpUrl($imageUrl)) {
+            $img = '<img src="'.e($imageUrl).'" alt="'.e($title !== '' ? $title : 'Product').'" '
+                .'style="display:block;max-width:100%;height:auto;border:0;border-radius:8px;">';
+            if ($productUrl !== null) {
+                $img = '<a href="'.e($productUrl).'" target="_blank" rel="noopener noreferrer">'.$img.'</a>';
+            }
+            $parts[] = $img;
+        } elseif ($showEmptyPlaceholders) {
+            $parts[] = '<div style="border:2px dashed #94a3b8;border-radius:12px;background:#f8fafc;color:#64748b;'
+                .'font-family:Arial,sans-serif;font-size:13px;padding:28px 16px;text-align:center;">No product image</div>';
+        }
+
+        if ($showTitle && $title !== '') {
+            $titleHtml = '<div style="font-family:Arial,sans-serif;font-size:18px;font-weight:700;color:#111111;margin-top:12px;">'
+                .e($title)
+                .'</div>';
+            if ($productUrl !== null) {
+                $titleHtml = '<a href="'.e($productUrl).'" target="_blank" rel="noopener noreferrer" '
+                    .'style="color:#111111;text-decoration:none;">'.$titleHtml.'</a>';
+            }
+            $parts[] = $titleHtml;
+        }
+
+        if ($showPrice && $price !== '') {
+            $priceLabel = $currencyCode !== '' ? $currencyCode.' '.$price : $price;
+            $parts[] = '<div style="font-family:Arial,sans-serif;font-size:15px;font-weight:600;color:#334155;margin-top:6px;">'
+                .e($priceLabel)
+                .'</div>';
+        }
+
+        if ($showButton && $productUrl !== null) {
+            $parts[] = '<div style="margin-top:14px;">'
+                .'<a href="'.e($productUrl).'" target="_blank" rel="noopener noreferrer" '
+                .'style="display:inline-block;background:#2878FF;color:#ffffff;text-decoration:none;padding:10px 18px;'
+                .'border-radius:6px;font-family:Arial,sans-serif;font-size:15px;">'
+                .e($buttonLabel)
+                .'</a></div>';
+        }
+
+        if ($parts === []) {
+            return $showEmptyPlaceholders
+                ? $this->emptyImagePlaceholder('Choose a Shopify product for this block')
+                : '';
+        }
+
+        return '<tr><td style="padding:16px 24px;" align="center">'.implode('', $parts).'</td></tr>';
+    }
+
+    private function isHttpUrl(string $url): bool
+    {
+        $scheme = parse_url($url, PHP_URL_SCHEME);
+
+        return in_array(is_string($scheme) ? strtolower($scheme) : '', ['http', 'https'], true);
     }
 
     /**

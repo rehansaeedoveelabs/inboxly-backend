@@ -240,6 +240,33 @@ class Store extends Model
     }
 
     /**
+     * Public storefront URL for a product handle (custom domain preferred).
+     */
+    public function storefrontProductUrl(?string $handle): ?string
+    {
+        $handle = is_string($handle) ? trim($handle) : '';
+        if ($handle === '') {
+            return null;
+        }
+
+        $host = filled($this->domain)
+            ? trim((string) $this->domain)
+            : trim((string) ($this->shopify_shop_domain ?? ''));
+        if ($host === '') {
+            return null;
+        }
+
+        if (! preg_match('#^https?://#i', $host)) {
+            $host = 'https://'.$host;
+        }
+
+        // Handles are Shopify slugs (letters, numbers, hyphens) — do not over-encode.
+        $safeHandle = rawurlencode(rawurldecode($handle));
+
+        return rtrim($host, '/').'/products/'.$safeHandle;
+    }
+
+    /**
      * Scopes Shopify actually granted for this installation (never the requested list).
      *
      * @return list<string>

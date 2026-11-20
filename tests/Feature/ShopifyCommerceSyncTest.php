@@ -110,6 +110,10 @@ class ShopifyCommerceSyncTest extends TestCase
                                             'vendor' => 'Inboxly',
                                             'updatedAt' => '2026-11-18T11:00:00Z',
                                             'featuredImage' => ['url' => 'https://cdn.example/honey.jpg'],
+                                            'priceRangeV2' => [
+                                                'minVariantPrice' => ['amount' => '12.00', 'currencyCode' => 'USD'],
+                                                'maxVariantPrice' => ['amount' => '18.00', 'currencyCode' => 'USD'],
+                                            ],
                                             'variantsCount' => ['count' => 2],
                                         ],
                                     ],
@@ -188,6 +192,9 @@ class ShopifyCommerceSyncTest extends TestCase
         $this->assertSame('Honey Jar', $product->title);
         $this->assertSame('honey-jar', $product->handle);
         $this->assertSame('https://cdn.example/honey.jpg', $product->metadata['featured_image_url'] ?? null);
+        $this->assertSame('12.00', $product->metadata['price_min'] ?? null);
+        $this->assertSame('18.00', $product->metadata['price_max'] ?? null);
+        $this->assertSame('USD', $product->metadata['currency_code'] ?? null);
 
         $order = ShopifyOrder::query()->where('store_id', $store->id)->first();
         $this->assertNotNull($order);
